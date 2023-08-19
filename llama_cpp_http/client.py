@@ -1,4 +1,5 @@
 import json
+import random
 import logging
 from typing import Any, List, Mapping, Optional, Iterator
 
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class LlamaCppClient(LLM):
-    endpoint: str = 'http://127.0.0.1:5000'
+    endpoint: str | list[str] | tuple[str] = 'http://127.0.0.1:5000'
     model: str = ''
     n_predict: int = -1
     ctx_size: int = 2048
@@ -54,7 +55,13 @@ class LlamaCppClient(LLM):
         **kwargs: Any,
     ) -> str:
         """Call to llama_cpp_server endpoint."""
-        url = f'{self.endpoint}/api/1.0/text/completion'
+
+        if isinstance(self.endpoint, (list, tuple)):
+            endpoint = random.choice(self.endpoint)
+        else:
+            endpoint = self.endpoint
+
+        url = f'{endpoint}/api/1.0/text/completion'
 
         req = {
             'prompt': prompt,
@@ -103,7 +110,12 @@ class LlamaCppClient(LLM):
         """
         logprobs = None
 
-        url = f'{self.endpoint}/api/1.0/text/completion'
+        if isinstance(self.endpoint, (list, tuple)):
+            endpoint = random.choice(self.endpoint)
+        else:
+            endpoint = self.endpoint
+
+        url = f'{endpoint}/api/1.0/text/completion'
 
         req = {
             'prompt': prompt,
