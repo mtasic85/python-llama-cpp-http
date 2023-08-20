@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "python-llama-cpp-http"
+name = "llama_cpp_http"
 version = "0.1.0"
 description = "Python llama.cpp HTTP Server and LangChain LLM Client"
 authors = ["Marko Tasic <mtasic85@gmail.com>"]
