@@ -78,6 +78,7 @@ if ALLOW_CACHE_PROMPT:
 
     class PromptOutputInfo(db.Entity):
         id = orm.PrimaryKey(str)
+        model = orm.Required(str, index=True)
         prompt_hash = orm.Required(str, index=True)
         prompt = orm.Required(str)
         output_hash = orm.Required(str)
@@ -89,7 +90,7 @@ if ALLOW_CACHE_PROMPT:
     db.generate_mapping(create_tables=True)
     orm.set_sql_debug(False)
 
-async def cache_prompt_output_info(id_: str, prompt: str, output: str, info: str):
+async def cache_prompt_output_info(id_: str, model: str, prompt: str, output: str, info: str):
     with orm.db_session:
         # prompt_hash
         m = sha256()
@@ -108,6 +109,7 @@ async def cache_prompt_output_info(id_: str, prompt: str, output: str, info: str
 
         r = PromptOutputInfo(
             id=id_,
+            model=model,
             prompt=prompt,
             prompt_hash=prompt_hash,
             output=output,
@@ -118,15 +120,21 @@ async def cache_prompt_output_info(id_: str, prompt: str, output: str, info: str
 
         orm.commit()
 
-async def search_prompt_output_info(prompt) -> list[dict]:
+async def search_prompt_output_info(model, prompt) -> list[dict]:
     with orm.db_session:
         # prompt_hash
         m = sha256()
         m.update(prompt.encode())
         prompt_hash = m.hexdigest()
 
-        # results = orm.select(r for r in PromptOutputInfo if prompt_hash in p.prompt_hash)
-        results = PromptOutputInfo.select_by_sql('SELECT * FROM PromptOutputInfo p WHERE p.prompt_hash LIKE $prompt_hash')
+        sql = R'''
+            SELECT * FROM PromptOutputInfo p
+            WHERE
+                p.model LIKE $model AND
+                p.prompt_hash LIKE $prompt_hash
+        '''
+
+        results = PromptOutputInfo.select_by_sql(sql)
         results = [(r.id, r.prompt, r.output, r.info) for r in results]
         return results
 
@@ -267,26 +275,23 @@ async def post_api_1_0_text_completion(request, id_):
     t = 0
 
     while True:
-        if t >= 10:
-            results = await search_prompt_output_info(prompt)
-            print('!', t, results)
+        if t > 0 and t % max(2, len(devices)) == 0:
+            results = await search_prompt_output_info(model, prompt)
+            # print('!', t, results)
 
-            if not results:
-                await asyncio.sleep(1.0)
-                continue
+            if results:
+                print(f'trial {t}, returning from cache')
+                id_, prompt, output, info = choice(results)
 
-            print(f'trial {t}, returning from cache')
-            id_, prompt, output, info = choice(results)
+                res = {
+                    'id': id_,
+                    'status': 'success',
+                    **data,
+                    'output': output,
+                    'info': info,
+                }
 
-            res = {
-                'id': id_,
-                'status': 'success',
-                **data,
-                'output': output,
-                'info': info,
-            }
-
-            return web.json_response(res)
+                return web.json_response(res)
 
         for dl in devices_locks:
             device, lock = dl
@@ -346,7 +351,7 @@ async def post_api_1_0_text_completion(request, id_):
         'info': info,
     }
 
-    await cache_prompt_output_info(id_, prompt, output, info)
+    await cache_prompt_output_info(id_, model, prompt, output, info)
     return web.json_response(res)
 
 async def _ws_text_completion_stream(ws, id_, data):
@@ -364,29 +369,38 @@ async def _ws_text_completion_stream(ws, id_, data):
     t = 0
 
     while True:
-        if t >= 10:
-            results = await search_prompt_output_info(prompt)
-            print('!', t, results)
+        if t > 0 and t % max(2, len(devices)) == 0:
+            results = await search_prompt_output_info(model, prompt)
+            # print('!', t, results)
 
-            if not results:
-                await asyncio.sleep(1.0)
-                continue
+            if results:
+                print(f'trial {t}, returning from cache')
+                id_, prompt, output, info = choice(results)
 
-            print(f'trial {t}, returning from cache')
-            id_, prompt, output, info = choice(results)
+                # simulate streaming
+                chunk = output
 
-            res = {
-                'id': id_,
-                'status': 'success',
-                **data,
-                'output': output,
-                'info': info,
-                'done': True
-            }
+                res = {
+                    'id': id_,
+                    'status': 'chunk',
+                    'chunk': chunk,
+                    'done': False,
+                }
 
-            await ws.send_json(res)
-            await ws.close()
-            return
+                await ws.send_json(res)
+
+                res = {
+                    'id': id_,
+                    'status': 'success',
+                    **data,
+                    'output': output,
+                    'info': info,
+                    'done': True
+                }
+
+                await ws.send_json(res)
+                await ws.close()
+                return
 
         for dl in devices_locks:
             device, lock = dl
@@ -474,7 +488,7 @@ async def _ws_text_completion_stream(ws, id_, data):
         'done': True
     }
 
-    await cache_prompt_output_info(id_, prompt, output, info)
+    await cache_prompt_output_info(id_, model, prompt, output, info)
     await ws.send_json(res)
     await ws.close()
 

@@ -81,3 +81,9 @@ WebSocket stream `/api/1.0/text/completion`:
 source venv/bin/activate
 python -B example_client_stream.py | jq -R '. as $line | try (fromjson) catch $line'
 ```
+
+### Example Running Server
+
+```bash
+python -m llama_cpp_http.server --backend clblast --models-path ~/models/ --llama-cpp-path ~/llama.cpp-clblast --allow-cache-prompt true --cache-prompt-db ~/models/llama_cpp_http_cache_prompt.sqlite
+```
