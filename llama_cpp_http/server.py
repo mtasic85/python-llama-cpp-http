@@ -220,6 +220,8 @@ async def _text_completion_stream(ws, id_, data):
                 '--n-gpu-layers', n_gpu_layers,
                 '--top-k', top_k,
                 '--top-p', top_p,
+                '--mlock',
+                '--no-mmap',
                 '--simple-io',
                 '--prompt', shell_prompt,
             ])
