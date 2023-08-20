@@ -5,6 +5,8 @@ import asyncio
 import argparse
 from uuid import uuid4
 from pprint import pprint
+from random import choice
+from hashlib import sha256
 
 import pyopencl as cl
 import aiohttp
@@ -24,11 +26,7 @@ parser.add_argument('--backend', help='llama.cpp execution backend', default='cp
 parser.add_argument('--models-path', help='models directory path', default='~/models')
 parser.add_argument('--llama-cpp-path', help='llama.cpp directory path', default='~/llama.cpp')
 parser.add_argument('--allow-cache-prompt', help='allow caching prompt for same prompt', type=bool, default=False)
-# parser.add_argument('--allow-bg-cache-prompt', help='allow background prompting and caching for same prompt', type=bool, default=False)
-# parser.add_argument('--bg-db-cache-prompt', help='database path for background caching of prompts', type=str, default='~/models/llama_cpp_http_bg_cache_prompt.sqlite')
-# parser.add_argument('--bg-n-tasks-per-prompt', help='number of background tasks for same prompt', type=int, default=3)
-# parser.add_argument('--bg-n-results-per-prompt', help='return last N results for same prompt', type=int, default=10)
-# parser.add_argument('--bg-llama-cpp-path', help='llama.cpp directory path used for background tasks', default='~/llama.cpp')
+parser.add_argument('--cache-prompt-db', help='database path for background caching of prompts', type=str, default='~/models/llama_cpp_http_cache_prompt.sqlite')
 cli_args = parser.parse_args()
 
 HOST = cli_args.host
@@ -38,17 +36,14 @@ BACKEND = cli_args.backend
 MODELS_PATH = cli_args.models_path
 LLAMA_CPP_PATH = cli_args.llama_cpp_path
 ALLOW_CACHE_PROMPT = cli_args.allow_cache_prompt
-# ALLOW_BG_CACHE_PROMPT = cli_args.allow_bg_cache_prompt
-# BG_DB_CACHE_PROMPT = cli_args.bg_db_cache_prompt
-# BG_N_TASKS_PER_PROMPT = cli_args.bg_n_tasks_per_prompt
-# BG_N_RESULTS_PER_PROMPT = cli_args.bg_n_results_per_prompt
-# BG_LLAMA_CPP_PATH = cli_args.bg_llama_cpp_path
-# BG_LLAMA_CPP_PATH = cli_args.bg_llama_cpp_path
+CACHE_PROMPT_DB = cli_args.cache_prompt_db
 
+#
+# devices
+#
 devices = []
 devices_locks = []
 task_queue = set()
-bg_task_queue = asyncio.Queue()
 
 def init_devices():
     global devices
@@ -78,12 +73,11 @@ def init_devices():
 #
 # background prompting and caching
 #
-if ALLOW_BG_CACHE_PROMPT:
+if ALLOW_CACHE_PROMPT:
     db = orm.Database()
 
     class PromptOutputInfo(db.Entity):
         id = orm.PrimaryKey(str)
-        parent_id = orm.Required(str, index=True)
         prompt_hash = orm.Required(str, index=True)
         prompt = orm.Required(str)
         output_hash = orm.Required(str)
@@ -91,10 +85,50 @@ if ALLOW_BG_CACHE_PROMPT:
         info_hash = orm.Required(str)
         info = orm.Required(str)
 
-    db.bind(provider='sqlite', filename=BG_DB_CACHE_PROMPT, create_db=True)
+    db.bind(provider='sqlite', filename=CACHE_PROMPT_DB, create_db=True)
     db.generate_mapping(create_tables=True)
-    orm.set_sql_debug(True)
+    orm.set_sql_debug(False)
 
+async def cache_prompt_output_info(id_: str, prompt: str, output: str, info: str):
+    with orm.db_session:
+        # prompt_hash
+        m = sha256()
+        m.update(prompt.encode())
+        prompt_hash = m.hexdigest()
+
+        # output_hash
+        m = sha256()
+        m.update(output.encode())
+        output_hash = m.hexdigest()
+
+        # info_hash
+        m = sha256()
+        m.update(info.encode())
+        info_hash = m.hexdigest()
+
+        r = PromptOutputInfo(
+            id=id_,
+            prompt=prompt,
+            prompt_hash=prompt_hash,
+            output=output,
+            output_hash=output_hash,
+            info=info,
+            info_hash=info_hash,
+        )
+
+        orm.commit()
+
+async def search_prompt_output_info(prompt) -> list[dict]:
+    with orm.db_session:
+        # prompt_hash
+        m = sha256()
+        m.update(prompt.encode())
+        prompt_hash = m.hexdigest()
+
+        # results = orm.select(r for r in PromptOutputInfo if prompt_hash in p.prompt_hash)
+        results = PromptOutputInfo.select_by_sql('SELECT * FROM PromptOutputInfo p WHERE p.prompt_hash LIKE $prompt_hash')
+        results = [(r.id, r.prompt, r.output, r.info) for r in results]
+        return results
 
 def build_llama_cpp_cmd(device, prompt, model, n_predict, ctx_size, batch_size, temperature, n_gpu_layers, top_k, top_p):
     pi, di, p, d = device
@@ -132,16 +166,6 @@ def build_llama_cpp_cmd(device, prompt, model, n_predict, ctx_size, batch_size, 
     cmd = ' '.join(cmd)
     return cmd
 
-#
-# web server
-#
-routes = web.RouteTableDef()
-
-# async def _bg_cache_prompt(device, id_, prompt, model, n_predict, ctx_size, batch_size, temperature, n_gpu_layers, top_k, top_p):
-#     pass
-
-
-
 async def run_prompt(device, id_, prompt, model, n_predict, ctx_size, batch_size, temperature, n_gpu_layers, top_k, top_p, streaming=False):
     proc = None
     stdout = None
@@ -161,14 +185,14 @@ async def run_prompt(device, id_, prompt, model, n_predict, ctx_size, batch_size
         top_p=top_p,
     )
 
-    proc = await asyncio.create_subprocess_shell(
-        cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-
     try:
         async with timeout(TIMEOUT) as cm:
+            proc = await asyncio.create_subprocess_shell(
+                cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+
             if streaming:
                 len_stdout = 0
                 stdout = []
@@ -220,6 +244,11 @@ async def run_prompt(device, id_, prompt, model, n_predict, ctx_size, batch_size
     else:
         yield True, stdout, stderr
 
+#
+# web server
+#
+routes = web.RouteTableDef()
+
 @routes.post('/api/1.0/text/completion')
 async def post_api_1_0_text_completion(request, id_):
     data = await request.json()
@@ -235,7 +264,30 @@ async def post_api_1_0_text_completion(request, id_):
     n_gpu_layers = str(data.get('n_gpu_layers', '0'))
     
     # find avilable lock
+    t = 0
+
     while True:
+        if t >= 10:
+            results = await search_prompt_output_info(prompt)
+            print('!', t, results)
+
+            if not results:
+                await asyncio.sleep(1.0)
+                continue
+
+            print(f'trial {t}, returning from cache')
+            id_, prompt, output, info = choice(results)
+
+            res = {
+                'id': id_,
+                'status': 'success',
+                **data,
+                'output': output,
+                'info': info,
+            }
+
+            return web.json_response(res)
+
         for dl in devices_locks:
             device, lock = dl
             pi, di, p, d = device
@@ -247,7 +299,9 @@ async def post_api_1_0_text_completion(request, id_):
             print(f'platform {pi}, device {di}: available')
             break
         else:
+            t += 1
             await asyncio.sleep(1.0)
+            continue
 
         if lock:
             break
@@ -292,6 +346,7 @@ async def post_api_1_0_text_completion(request, id_):
         'info': info,
     }
 
+    await cache_prompt_output_info(id_, prompt, output, info)
     return web.json_response(res)
 
 async def _ws_text_completion_stream(ws, id_, data):
@@ -306,7 +361,33 @@ async def _ws_text_completion_stream(ws, id_, data):
     n_gpu_layers = str(data.get('n_gpu_layers', '0'))
     
     # find avilable lock
+    t = 0
+
     while True:
+        if t >= 10:
+            results = await search_prompt_output_info(prompt)
+            print('!', t, results)
+
+            if not results:
+                await asyncio.sleep(1.0)
+                continue
+
+            print(f'trial {t}, returning from cache')
+            id_, prompt, output, info = choice(results)
+
+            res = {
+                'id': id_,
+                'status': 'success',
+                **data,
+                'output': output,
+                'info': info,
+                'done': True
+            }
+
+            await ws.send_json(res)
+            await ws.close()
+            return
+
         for dl in devices_locks:
             device, lock = dl
             pi, di, p, d = device
@@ -320,6 +401,7 @@ async def _ws_text_completion_stream(ws, id_, data):
                     'task_queue_size': len(task_queue),
                 }
 
+                t += 1
                 await ws.send_json(res)
                 await asyncio.sleep(1.0)
                 continue
@@ -327,7 +409,9 @@ async def _ws_text_completion_stream(ws, id_, data):
             print(f'platform {pi}, device {di}: available')
             break
         else:
+            t += 1
             await asyncio.sleep(1.0)
+            continue
 
         if lock:
             break
@@ -390,6 +474,7 @@ async def _ws_text_completion_stream(ws, id_, data):
         'done': True
     }
 
+    await cache_prompt_output_info(id_, prompt, output, info)
     await ws.send_json(res)
     await ws.close()
 
