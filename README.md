@@ -60,5 +60,5 @@ WebSocket stream `/api/1.0/text/completion`:
 
 ```bash
 source venv/bin/activate
-python -B example_client_stream.py | jq .
+python -B example_client_stream.py | jq -R '. as $line | try (fromjson) catch $line'
 ```

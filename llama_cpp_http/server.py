@@ -104,6 +104,8 @@ async def post_api_1_0_text_completion(request, id_):
                 '--n-gpu-layers', n_gpu_layers,
                 '--top-k', top_k,
                 '--top-p', top_p,
+                '--mlock',
+                '--no-mmap',
                 '--simple-io',
                 '--prompt', shell_prompt,
             ])
