@@ -29,6 +29,14 @@ parser.add_argument('--timeout', help='llama.cpp timeout in seconds', default=TI
 parser.add_argument('--platform', help='pyopencl platform number', default=PLATFORM, type=int)
 parser.add_argument('--models-path', help='models direcory path', default=MODELS_PATH)
 parser.add_argument('--llama-cpp-path', help='llama.cpp direcory path', default=LLAMA_CPP_PATH)
+cli_args = parser.parse_args()
+
+HOST = cli_args.host
+PORT = cli_args.port
+TIMEOUT = cli_args.timeout
+PLATFORM = cli_args.platform
+MODELS_PATH = cli_args.models_path
+LLAMA_CPP_PATH = cli_args.llama_cpp_path
 
 cl_devices = []
 cl_devices_locks = []
@@ -348,7 +356,6 @@ def get_app():
     return app
 
 if __name__ == '__main__':
-    cli_args = parser.parse_args()
     print(cli_args)
 
     init_cl_devices()
