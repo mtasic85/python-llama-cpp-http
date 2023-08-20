@@ -15,6 +15,7 @@ async-timeout = "^4.0.3"
 websockets = "^11.0.3"
 requests = "^2.31.0"
 langchain = "^0.0.268"
+pony = "^0.7.16"
 
 
 [build-system]
