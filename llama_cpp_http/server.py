@@ -233,15 +233,6 @@ async def run_prompt(device: int,
         top_p=top_p,
     )
 
-    # async def read_stderr(proc):
-    #     nonlocal stderr
-    #     nonlocal stopped
-    #
-    #     while not proc.stderr.at_eof() and not stopped:
-    #         # stderr
-    #         buf = await proc.stderr.read(8)
-    #         stderr += buf
-
     try:
         async with timeout(TIMEOUT) as cm:
             proc = await asyncio.create_subprocess_shell(
@@ -253,10 +244,6 @@ async def run_prompt(device: int,
             if streaming:
                 buf: bytes
                 text: str
-
-                # async with asyncio.TaskGroup() as tg:
-                #     coro = read_stderr(proc)
-                #     read_stderr_task = tg.create_task(coro)
 
                 # strip original prompt from return
                 while not proc.stdout.at_eof():
@@ -308,7 +295,6 @@ async def run_prompt(device: int,
                                 break
 
                     if stopped:
-                        # await read_stderr_task
                         break
 
                     await asyncio.sleep(0.01)
