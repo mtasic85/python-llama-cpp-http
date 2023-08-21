@@ -192,9 +192,11 @@ def build_llama_cpp_cmd(device: int,
         '--prompt', shell_prompt,
     ])
 
+    cmd = [str(n) for n in cmd]
     cmd = ' '.join(cmd)
     return cmd
 
+'''
 async def run_prompt(device: int,
                      id_: str,
                      prompt: str,
@@ -343,6 +345,142 @@ async def run_prompt(device: int,
         yield True, None, res
     else:
         yield True, stdout, stderr
+'''
+async def run_prompt(device: int,
+                     id_: str,
+                     prompt: str,
+                     model: str,
+                     n_predict: int,
+                     ctx_size: int,
+                     batch_size: int,
+                     temperature: float,
+                     n_gpu_layers: int,
+                     top_k: int,
+                     top_p: float,
+                     stop: list[str] | None=None,
+                     streaming: bool=False) -> AsyncIterator[(bool, str, str)]:
+    proc = None
+    stdout = None
+    stderr = None
+    prompt_enc: bytes = prompt.encode()
+    shell_prompt: str = shlex.quote(prompt)
+    stopped: bool = False
+
+    print('? prompt:', repr(prompt))
+
+    cmd: str = build_llama_cpp_cmd(
+        device=device,
+        prompt=prompt,
+        model=model,
+        n_predict=n_predict,
+        ctx_size=ctx_size,
+        batch_size=batch_size,
+        temperature=temperature,
+        n_gpu_layers=n_gpu_layers,
+        top_k=top_k,
+        top_p=top_p,
+    )
+
+    try:
+        async with timeout(TIMEOUT) as cm:
+            proc = await asyncio.create_subprocess_shell(
+                cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+
+            if streaming:
+                stdout: bytes = b''
+                buf: bytes
+                text: str
+
+                # strip original prompt from return
+                while not proc.stdout.at_eof():
+                    buf = await proc.stdout.read(128)
+                    stdout += buf
+
+                    # skip original prompt
+                    if len(stdout) > len(prompt_enc):
+                        break
+
+                stdout = stdout[1 + len(prompt_enc):]
+
+                # return left-overs from stdout as buf
+                buf = stdout
+                # text = buf.decode('unicode-escape')
+                text = buf.decode()
+
+                res = {
+                    'id': id_,
+                    'status': 'chunk',
+                    'chunk': text,
+                    'done': False,
+                }
+
+                yield False, res, None
+
+                # read rest of tokens
+                while not proc.stdout.at_eof():
+                    buf = await proc.stdout.read(128)
+                    stdout += buf
+                    # text = buf.decode('unicode-escape')
+                    text = buf.decode()
+                    
+                    res = {
+                        'id': id_,
+                        'status': 'chunk',
+                        'chunk': text,
+                        'done': False,
+                    }
+
+                    yield False, res, None
+
+                    if stopped:
+                        break
+
+                    await asyncio.sleep(0.01)
+
+                stderr = await proc.stderr.read()
+            else:
+                stdout, stderr = await proc.communicate()
+                stdout = stdout[1 + len(prompt_enc):]
+
+            if stopped:
+                try:
+                    proc.kill()
+                    print('proc kill [stop]')
+                except Exception as e:
+                    print('proc kill [stop]:', e)
+                finally:
+                    proc = None
+            
+            # stdout = stdout.decode('unicode-escape').strip()
+            # stderr = stderr.decode('unicode-escape').strip()
+            stdout = stdout.decode().strip()
+            stderr = stderr.decode().strip()
+    except asyncio.TimeoutError as e:
+        try:
+            proc.kill()
+            print('proc kill [timeout]')
+        except Exception as e:
+            print('proc kill [timeout]:', e)
+        finally:
+            proc = None
+
+    print('!! stdout', repr(stdout))
+    print('!! stderr', repr(stderr))
+
+    if cm.expired:
+        res = {
+            'id': id_,
+            'status': 'error',
+            'error': 'timeout',
+            'task_queue_size': len(task_queue),
+        }
+
+        yield True, None, res
+    else:
+        yield True, stdout, stderr
 
 #
 # web server
@@ -355,13 +493,13 @@ async def post_api_1_0_text_completion(request, id_: str):
     
     model = data['model']
     prompt = data['prompt']
-    n_predict = str(data.get('n_predict', '-1'))
-    ctx_size = str(data.get('ctx_size', '2048'))
-    batch_size = str(data.get('batch_size', '512'))
-    temperature = str(data.get('temperature', '0.8'))
-    top_k = str(data.get('top_k', '40'))
-    top_p = str(data.get('top_p', '0.9'))
-    n_gpu_layers = str(data.get('n_gpu_layers', '0'))
+    n_predict = int(data.get('n_predict', '-1'))
+    ctx_size = int(data.get('ctx_size', '2048'))
+    batch_size = int(data.get('batch_size', '512'))
+    temperature = float(data.get('temperature', '0.8'))
+    top_k = int(data.get('top_k', '40'))
+    top_p = float(data.get('top_p', '0.9'))
+    n_gpu_layers = int(data.get('n_gpu_layers', '0'))
     stop = data.get('stop')
     
     # find avilable lock
@@ -453,20 +591,20 @@ async def post_api_1_0_text_completion(request, id_: str):
 async def _ws_text_completion_stream(ws, id_: str, data: dict):
     model = data['model']
     prompt = data['prompt']
-    n_predict = str(data.get('n_predict', '-1'))
-    ctx_size = str(data.get('ctx_size', '2048'))
-    batch_size = str(data.get('batch_size', '512'))
-    temperature = str(data.get('temperature', '0.8'))
-    top_k = str(data.get('top_k', '40'))
-    top_p = str(data.get('top_p', '0.9'))
-    n_gpu_layers = str(data.get('n_gpu_layers', '0'))
+    n_predict = int(data.get('n_predict', '-1'))
+    ctx_size = int(data.get('ctx_size', '2048'))
+    batch_size = int(data.get('batch_size', '512'))
+    temperature = float(data.get('temperature', '0.8'))
+    top_k = int(data.get('top_k', '40'))
+    top_p = float(data.get('top_p', '0.9'))
+    n_gpu_layers = int(data.get('n_gpu_layers', '0'))
     stop = data.get('stop')
     
     # find avilable lock
     t = 0
 
     while True:
-        if t > 0 and t % max(2, len(devices)) == 0:
+        if ALLOW_CACHE_PROMPT and t > 0 and t % max(2, len(devices)) == 0:
             results = await search_prompt_output_info(model, prompt)
             # print('!', t, results)
 
