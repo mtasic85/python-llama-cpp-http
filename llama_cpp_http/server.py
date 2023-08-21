@@ -364,6 +364,7 @@ async def run_prompt(device: int,
     stderr = None
     prompt_enc: bytes = prompt.encode()
     shell_prompt: str = shlex.quote(prompt)
+    stop_enc = None if stop is None else [n.encode() for n in stop]
     stopped: bool = False
 
     print('? prompt:', repr(prompt))
@@ -434,6 +435,15 @@ async def run_prompt(device: int,
                     }
 
                     yield False, res, None
+
+                    # check for stop words
+                    if stop_enc:
+                        for n in stop_enc:
+                            if n in stdout:
+                                print('* stopped:', stop)
+                                stopped = True
+                                stdout = stdout[:stdout.index(n)]
+                                break
 
                     if stopped:
                         break
