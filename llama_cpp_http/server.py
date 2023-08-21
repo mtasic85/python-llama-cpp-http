@@ -213,6 +213,7 @@ async def run_prompt(device: int,
     stderr = None
     shell_prompt: str = shlex.quote(prompt)
     prompt_enc: bytes = prompt.encode()
+    stopped: bool = False
 
     cmd: str = build_llama_cpp_cmd(
         device=device,
@@ -238,7 +239,6 @@ async def run_prompt(device: int,
             if streaming:
                 stdout: bytes = b''
                 chunks_stdout: bytes = b''
-                stopped: bool = False
 
                 while not proc.stdout.at_eof():
                     buf: bytes = await proc.stdout.read(128)
@@ -305,6 +305,15 @@ async def run_prompt(device: int,
                 stderr = await proc.stderr.read()
             else:
                 stdout, stderr = await proc.communicate()
+
+            if stopped:
+                try:
+                    proc.kill()
+                    print('proc kill [stop]')
+                except Exception as e:
+                    print('proc kill [stop]:', e)
+                finally:
+                    proc = None
             
             stdout = stdout[1 + len(prompt_enc):]
             stdout = stdout.decode('unicode-escape').strip()
@@ -312,8 +321,9 @@ async def run_prompt(device: int,
     except asyncio.TimeoutError as e:
         try:
             proc.kill()
+            print('proc kill [timeout]')
         except Exception as e:
-            print('proc kill:', e)
+            print('proc kill [timeout]:', e)
         finally:
             proc = None
 
