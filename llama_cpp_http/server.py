@@ -297,7 +297,7 @@ async def run_prompt(device: int,
                     if stopped:
                         break
 
-                    await asyncio.sleep(0.01)
+                    await asyncio.sleep(0.05)
             else:
                 stdout, stderr = await proc.communicate()
                 stdout = stdout[1 + len(prompt_enc):]
