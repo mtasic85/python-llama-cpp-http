@@ -251,8 +251,10 @@ async def run_prompt(device: int,
                     if chunks_stdout == b'':
                         # print('!', repr(prompt_enc))
                         # print('!', repr(stdout))
-                        chunks_stdout = stdout[1 + len(prompt_enc):]
-                        d = len(stdout) - (1 + len(prompt_enc))
+                        # chunks_stdout = stdout[1 + len(prompt_enc):]
+                        # d = len(stdout) - (1 + len(prompt_enc))
+                        chunks_stdout = stdout[len(prompt_enc):]
+                        d = len(stdout) - len(prompt_enc)
                         buf = buf[d:]
 
                     chunk: str = buf.decode('unicode-escape')
