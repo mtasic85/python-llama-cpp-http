@@ -73,6 +73,7 @@ class LlamaCppClient(LLM):
             'top_k': self.top_k,
             'top_p': self.top_p,
             'n_gpu_layers': self.n_gpu_layers,
+            'stop': stop,
         }
 
         if self.streaming:
@@ -127,6 +128,7 @@ class LlamaCppClient(LLM):
             'top_k': self.top_k,
             'top_p': self.top_p,
             'n_gpu_layers': self.n_gpu_layers,
+            'stop': stop,
         }
 
         with connect(url, open_timeout=300, close_timeout=300) as ws:

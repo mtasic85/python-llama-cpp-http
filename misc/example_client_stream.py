@@ -25,6 +25,7 @@ AI:'''
         'prompt': prompt,
         'temperature': 0.75,
         'n_gpu_layers': 33,
+        'stop': ['Human:']
     }
     
     async with aiohttp.ClientSession() as session:
