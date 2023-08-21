@@ -414,7 +414,7 @@ async def run_prompt(device: int,
 
                 # return left-overs from stdout as buf
                 buf = stdout
-                text = buf.decode()
+                text = buf.decode('unicode-escape')
 
                 res = {
                     'id': id_,
@@ -429,7 +429,7 @@ async def run_prompt(device: int,
                 while not proc.stdout.at_eof():
                     buf = await proc.stdout.read(128)
                     stdout += buf
-                    text = buf.decode()
+                    text = buf.decode('unicode-escape')
                     
                     res = {
                         'id': id_,
