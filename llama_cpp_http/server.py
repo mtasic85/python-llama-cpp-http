@@ -358,7 +358,7 @@ async def post_api_1_0_text_completion(request, id_: str):
     t = 0
 
     while True:
-        if t > 0 and t % max(2, len(devices)) == 0:
+        if ALLOW_CACHE_PROMPT and t > 0 and t % max(2, len(devices)) == 0:
             results = await search_prompt_output_info(model, prompt)
             # print('!', t, results)
 
@@ -424,7 +424,7 @@ async def post_api_1_0_text_completion(request, id_: str):
     print(f'platform {pi}, device {di}: released')
 
     # post-process
-    output = stdout[len(prompt):]
+    output = stdout
     info = stderr
 
     res = {
