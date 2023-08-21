@@ -455,6 +455,7 @@ async def run_prompt(device: int,
             if stopped:
                 try:
                     proc.kill()
+                    await proc.wait()
                     print('proc kill [stop]')
                 except Exception as e:
                     print('proc kill [stop]:', e)
@@ -466,6 +467,7 @@ async def run_prompt(device: int,
     except asyncio.TimeoutError as e:
         try:
             proc.kill()
+            await proc.wait()
             print('proc kill [timeout]')
         except Exception as e:
             print('proc kill [timeout]:', e)
