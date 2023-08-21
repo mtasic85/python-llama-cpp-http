@@ -210,12 +210,13 @@ async def run_prompt(device: int,
                      stop: list[str] | None=None,
                      streaming: bool=False) -> AsyncIterator[(bool, str, str)]:
     proc = None
-    stdout = None
-    stderr = None
+    stdout: bytes = b''
+    stderr: bytes = b'llama.cpp ' + model.encode()
     prompt_enc: bytes = prompt.encode()
     shell_prompt: str = shlex.quote(prompt)
     stop_enc = None if stop is None else [n.encode() for n in stop]
     stopped: bool = False
+    read_stderr_task = None
 
     print('? prompt:', repr(prompt))
 
@@ -232,6 +233,15 @@ async def run_prompt(device: int,
         top_p=top_p,
     )
 
+    # async def read_stderr(proc):
+    #     nonlocal stderr
+    #     nonlocal stopped
+    #
+    #     while not proc.stderr.at_eof() and not stopped:
+    #         # stderr
+    #         buf = await proc.stderr.read(8)
+    #         stderr += buf
+
     try:
         async with timeout(TIMEOUT) as cm:
             proc = await asyncio.create_subprocess_shell(
@@ -241,19 +251,17 @@ async def run_prompt(device: int,
             )
 
             if streaming:
-                stdout: bytes = b''
-                stderr: bytes = b''
                 buf: bytes
                 text: str
 
+                # async with asyncio.TaskGroup() as tg:
+                #     coro = read_stderr(proc)
+                #     read_stderr_task = tg.create_task(coro)
+
                 # strip original prompt from return
                 while not proc.stdout.at_eof():
-                    # stderr
-                    buf = await proc.stderr.read(128)
-                    stderr += buf
-
                     # stdout
-                    buf = await proc.stdout.read(32)
+                    buf = await proc.stdout.read(16)
                     stdout += buf
 
                     # skip original prompt
@@ -300,6 +308,7 @@ async def run_prompt(device: int,
                                 break
 
                     if stopped:
+                        # await read_stderr_task
                         break
 
                     await asyncio.sleep(0.01)
