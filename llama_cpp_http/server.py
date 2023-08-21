@@ -249,11 +249,11 @@ async def run_prompt(device: int,
                 # strip original prompt from return
                 while not proc.stdout.at_eof():
                     # stderr
-                    buf = await proc.stderr.read(256)
+                    buf = await proc.stderr.read(128)
                     stderr += buf
 
                     # stdout
-                    buf = await proc.stdout.read(128)
+                    buf = await proc.stdout.read(32)
                     stdout += buf
 
                     # skip original prompt
