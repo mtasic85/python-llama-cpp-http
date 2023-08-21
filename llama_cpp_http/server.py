@@ -296,8 +296,6 @@ async def run_prompt(device: int,
                                 stopped = True
                                 stdout = stdout[:stdout.rindex(n_enc)]
                                 break
-                    else:
-                        raise ValueError(stop)
 
                     if stopped:
                         break
