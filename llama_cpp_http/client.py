@@ -145,9 +145,6 @@ class LlamaCppClient(LLM):
                     continue
 
                 text = res['chunk']
-                
-                if stop is not None:
-                    text = enforce_stop_tokens(text, stop)
 
                 chunk = GenerationChunk(
                     text=text,

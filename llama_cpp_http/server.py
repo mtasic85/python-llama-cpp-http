@@ -392,11 +392,17 @@ async def run_prompt(device: int,
 
             if streaming:
                 stdout: bytes = b''
+                stderr: bytes = b''
                 buf: bytes
                 text: str
 
                 # strip original prompt from return
                 while not proc.stdout.at_eof():
+                    # stderr
+                    buf = await proc.stderr.read(256)
+                    stderr += buf
+
+                    # stdout
                     buf = await proc.stdout.read(128)
                     stdout += buf
 
@@ -425,14 +431,6 @@ async def run_prompt(device: int,
                     stdout += buf
                     text = buf.decode()
                     
-                    # check for stop words
-                    if stop_enc:
-                        for n in stop_enc:
-                            if n in stdout:
-                                print('* stopped:', stop)
-                                stdout = stdout[:stdout.index(n)]
-                                stopped = True
-
                     res = {
                         'id': id_,
                         'status': 'chunk',
@@ -442,14 +440,19 @@ async def run_prompt(device: int,
 
                     yield False, res, None
 
+                    # check for stop words
+                    if stop_enc:
+                        for n in stop_enc:
+                            if n in stdout:
+                                print('* stopped:', stop)
+                                stdout = stdout[:stdout.index(n)]
+                                stopped = True
+                                break
+
                     if stopped:
-                        # drain stdout
-                        await proc.stdout.read()
                         break
 
                     await asyncio.sleep(0.01)
-
-                stderr = await proc.stderr.read()
             else:
                 stdout, stderr = await proc.communicate()
                 stdout = stdout[1 + len(prompt_enc):]
