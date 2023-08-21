@@ -443,6 +443,8 @@ async def run_prompt(device: int,
                     yield False, res, None
 
                     if stopped:
+                        # drain stdout
+                        await proc.stdout.read()
                         break
 
                     await asyncio.sleep(0.01)
