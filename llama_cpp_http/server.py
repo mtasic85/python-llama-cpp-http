@@ -408,7 +408,6 @@ async def run_prompt(device: int,
 
                 # return left-overs from stdout as buf
                 buf = stdout
-                # text = buf.decode('unicode-escape')
                 text = buf.decode()
 
                 res = {
@@ -424,7 +423,6 @@ async def run_prompt(device: int,
                 while not proc.stdout.at_eof():
                     buf = await proc.stdout.read(128)
                     stdout += buf
-                    # text = buf.decode('unicode-escape')
                     text = buf.decode()
                     
                     # check for stop words
@@ -432,8 +430,8 @@ async def run_prompt(device: int,
                         for n in stop_enc:
                             if n in stdout:
                                 print('* stopped:', stop)
-                                stopped = True
                                 stdout = stdout[:stdout.index(n)]
+                                stopped = True
 
                     res = {
                         'id': id_,
@@ -463,8 +461,6 @@ async def run_prompt(device: int,
                 finally:
                     proc = None
             
-            # stdout = stdout.decode('unicode-escape').strip()
-            # stderr = stderr.decode('unicode-escape').strip()
             stdout = stdout.decode().strip()
             stderr = stderr.decode().strip()
     except asyncio.TimeoutError as e:
