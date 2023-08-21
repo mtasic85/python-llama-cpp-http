@@ -267,35 +267,35 @@ async def run_prompt(device: int,
 
                     yield False, res, None
 
-                    if isinstance(stop, (str, bytes)):
-                        stop_enc: bytes
-
-                        if isinstance(stop, str):
-                            stop_enc = stop.encode()
-                        elif isinstance(stop, bytes):
-                            stop_enc = stop
-
-                        if stop_inc in chunks_stdout:
-                            print('stopped:', stop)
-                            stopped = True
-                            stdout = stdout[:stdout.rindex(stop_inc)]
-                            break
-                    elif isinstance(stop, (list, tuple)):
-                        n_enc: bytes
-
-                        for n in stop:
-                            if isinstance(n, str):
-                                n_enc = n.encode()
-                            elif isinstance(n, bytes):
-                                n_enc = n
-                            else:
-                                raise ValueError(stop)
-
-                            if n_enc in chunks_stdout:
-                                print('stopped:', stop)
-                                stopped = True
-                                stdout = stdout[:stdout.rindex(n_enc)]
-                                break
+                    # if isinstance(stop, (str, bytes)):
+                    #     stop_enc: bytes
+                    #
+                    #     if isinstance(stop, str):
+                    #         stop_enc = stop.encode()
+                    #     elif isinstance(stop, bytes):
+                    #         stop_enc = stop
+                    #
+                    #     if stop_inc in chunks_stdout:
+                    #         print('stopped:', stop)
+                    #         stopped = True
+                    #         stdout = stdout[:stdout.rindex(stop_inc)]
+                    #         break
+                    # elif isinstance(stop, (list, tuple)):
+                    #     n_enc: bytes
+                    #
+                    #     for n in stop:
+                    #         if isinstance(n, str):
+                    #             n_enc = n.encode()
+                    #         elif isinstance(n, bytes):
+                    #             n_enc = n
+                    #         else:
+                    #             raise ValueError(stop)
+                    #
+                    #         if n_enc in chunks_stdout:
+                    #             print('stopped:', stop)
+                    #             stopped = True
+                    #             stdout = stdout[:stdout.rindex(n_enc)]
+                    #             break
 
                     if stopped:
                         break

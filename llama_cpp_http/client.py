@@ -144,8 +144,13 @@ class LlamaCppClient(LLM):
                 elif res['status'] != 'chunk':
                     continue
 
+                text = res['chunk']
+                
+                if stop is not None:
+                    text = enforce_stop_tokens(text, stop)
+
                 chunk = GenerationChunk(
-                    text=res['chunk'],
+                    text=text,
                     generation_info={'logprobs': logprobs},
                 )
 
