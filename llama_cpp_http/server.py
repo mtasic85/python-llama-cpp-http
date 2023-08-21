@@ -427,6 +427,14 @@ async def run_prompt(device: int,
                     # text = buf.decode('unicode-escape')
                     text = buf.decode()
                     
+                    # check for stop words
+                    if stop_enc:
+                        for n in stop_enc:
+                            if n in stdout:
+                                print('* stopped:', stop)
+                                stopped = True
+                                stdout = stdout[:stdout.index(n)]
+
                     res = {
                         'id': id_,
                         'status': 'chunk',
@@ -435,15 +443,6 @@ async def run_prompt(device: int,
                     }
 
                     yield False, res, None
-
-                    # check for stop words
-                    if stop_enc:
-                        for n in stop_enc:
-                            if n in stdout:
-                                print('* stopped:', stop)
-                                stopped = True
-                                stdout = stdout[:stdout.index(n)]
-                                break
 
                     if stopped:
                         break
