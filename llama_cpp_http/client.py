@@ -138,8 +138,10 @@ class LlamaCppClient(LLM):
                 res = json.loads(msg)
 
                 if res['status'] == 'error':
+                    ws.close()
                     raise Exception(res)
                 elif res['status'] == 'success':
+                    ws.close()
                     break
                 elif res['status'] != 'chunk':
                     continue
