@@ -5,8 +5,6 @@ import aiohttp
 
 async def main():
     prompt = R'''The following is a friendly conversation between a human and an AI. The AI is talkative and provides lots of specific details from its context. If the AI does not know the answer to a question, it truthfully says it does not know.
-
-Current conversation:
 Human: I will provide you structured text.
 AI: Alright, I will parse it at the end as valid JSON.
 Human: You will parse text into valid JSON.
