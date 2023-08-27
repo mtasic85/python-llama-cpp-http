@@ -276,6 +276,7 @@ async def run_prompt(device: int,
                     buf = await proc.stdout.read(128)
                     stdout += buf
 
+                    # FIXME: requires better implementation
                     try:
                         text = buf.decode('unicode-escape')
                     except Exception as e:
