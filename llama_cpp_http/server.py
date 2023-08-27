@@ -25,10 +25,10 @@ parser.add_argument('--port', help='http server port', default=5000, type=int)
 parser.add_argument('--timeout', help='llama.cpp timeout in seconds', default=300.0, type=float)
 parser.add_argument('--backend', help='llama.cpp execution backend', default='cpu', type=str, choices=['cpu', 'clblast', 'cublis'])
 parser.add_argument('--models-path', help='models directory path', default='~/models')
-parser.add_argument('--llama-cpp-path', help='llama.cpp directory path', default='~/llama.cpp')
+parser.add_argument('--llama-cpp-path', help='llama.cpp directory path', default='~/llama.cpp-clblast')
 parser.add_argument('--allow-cache-prompt', help='allow caching prompt for same prompt', type=str, default='false')
 parser.add_argument('--cache-prompt-db', help='database path for background caching of prompts', type=str, default='~/models/llama_cpp_http_cache_prompt.sqlite')
-cli_args = parser.parse_args()
+cli_args = parser.parse_args([])
 
 HOST = cli_args.host
 PORT = cli_args.port
@@ -629,7 +629,7 @@ async def task_queue_middleware(request, handler):
 
     return resp
 
-def get_app():
+async def get_app():
     app = web.Application(middlewares=[task_queue_middleware])
     app.add_routes(routes)
     return app
@@ -638,5 +638,5 @@ if __name__ == '__main__':
     print(cli_args)
 
     init_devices()
-    app = get_app()
+    app = asyncio.run(get_app())
     web.run_app(app, host=HOST, port=PORT)

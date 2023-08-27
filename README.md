@@ -87,3 +87,7 @@ python -B misc/example_client_stream.py | jq -R '. as $line | try (fromjson) cat
 ```bash
 python -m llama_cpp_http.server --backend clblast --models-path ~/models/ --llama-cpp-path ~/llama.cpp-clblast --allow-cache-prompt true --cache-prompt-db ~/models/llama_cpp_http_cache_prompt.sqlite
 ```
+
+```bash
+gunicorn llama_cpp_http.server:get_app --bind 0.0.0.0:5000 --workers 1 --worker-class aiohttp.GunicornWebWorker --backend clblast --models-path ~/models/ --llama-cpp-path ~/llama.cpp-clblast --allow-cache-prompt true --cache-prompt-db ~/models/llama_cpp_http_cache_prompt.sqlite
+```
