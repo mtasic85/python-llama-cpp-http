@@ -275,7 +275,12 @@ async def run_prompt(device: int,
                 while not proc.stdout.at_eof():
                     buf = await proc.stdout.read(128)
                     stdout += buf
-                    text = buf.decode('unicode-escape')
+
+                    try:
+                        text = buf.decode('unicode-escape')
+                    except Exception as e:
+                        print('run_prompt buf.decode("unicode-escape") exception:', e)
+                        continue
                     
                     res = {
                         'id': id_,
