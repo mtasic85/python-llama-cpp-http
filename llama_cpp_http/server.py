@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import shlex
 import asyncio
@@ -28,7 +29,7 @@ parser.add_argument('--models-path', help='models directory path', default='~/mo
 parser.add_argument('--llama-cpp-path', help='llama.cpp directory path', default='~/llama.cpp-clblast')
 parser.add_argument('--allow-cache-prompt', help='allow caching prompt for same prompt', type=str, default='false')
 parser.add_argument('--cache-prompt-db', help='database path for background caching of prompts', type=str, default='~/models/llama_cpp_http_cache_prompt.sqlite')
-cli_args = parser.parse_args([])
+cli_args = parser.parse_args()
 
 HOST = cli_args.host
 PORT = cli_args.port
@@ -603,10 +604,12 @@ async def get_api_1_0_text_completion(request, id_: str):
                 task = tg.create_task(coro)
             elif msg.type == aiohttp.WSMsgType.ERROR:
                 print(f'ws connection closed with exception {ws.exception()}')
+                await ws.close()
                 break
             else:
                 print(f'ws msg.type:', msg.type)
 
+    await task
     print('websocket connection closed')
     return ws
 
