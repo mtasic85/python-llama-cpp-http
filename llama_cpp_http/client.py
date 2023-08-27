@@ -131,8 +131,8 @@ class LlamaCppClient(LLM):
             'n_gpu_layers': self.n_gpu_layers,
             'stop': stop,
         }
-
-        with connect(url, open_timeout=10.0, close_timeout=10.0) as ws:
+        
+        with connect(url, open_timeout=30.0, close_timeout=10.0) as ws:
             ws.send(json.dumps(req))
             
             for msg in ws:
