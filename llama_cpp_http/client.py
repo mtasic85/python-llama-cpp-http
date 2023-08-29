@@ -151,33 +151,42 @@ class LlamaCppClient(LLM):
             'stop': stop,
         }
         
-        with connect(url, open_timeout=30.0, close_timeout=10.0) as ws:
-            ws.send(json.dumps(req))
-            
-            for msg in ws:
-                res = json.loads(msg)
+        connected = False
 
-                if res['status'] == 'error':
-                    ws.close()
-                    raise Exception(res)
-                elif res['status'] == 'success':
-                    ws.close()
-                    break
-                elif res['status'] != 'chunk':
-                    continue
+        while not connected:
+            try:
+                with connect(url, open_timeout=10.0, close_timeout=10.0) as ws:
+                    connected = True
+                    ws.send(json.dumps(req))
+                    
+                    for msg in ws:
+                        res = json.loads(msg)
 
-                text = res['chunk']
+                        if res['status'] == 'error':
+                            ws.close()
+                            raise Exception(res)
+                        elif res['status'] == 'success':
+                            ws.close()
+                            break
+                        elif res['status'] != 'chunk':
+                            continue
 
-                chunk = GenerationChunk(
-                    text=text,
-                    generation_info={'logprobs': logprobs},
-                )
+                        text = res['chunk']
 
-                yield chunk
+                        chunk = GenerationChunk(
+                            text=text,
+                            generation_info={'logprobs': logprobs},
+                        )
 
-                if run_manager:
-                    run_manager.on_llm_new_token(
-                        token=chunk.text,
-                        verbose=self.verbose,
-                        log_probs=logprobs,
-                    )
+                        yield chunk
+
+                        if run_manager:
+                            run_manager.on_llm_new_token(
+                                token=chunk.text,
+                                verbose=self.verbose,
+                                log_probs=logprobs,
+                            )
+            except TimeoutError as e:
+                print('timeout:', e)
+                print('retrying')
+                continue
