@@ -5,8 +5,6 @@ import aiohttp
 
 async def main():
     prompt = R'''The following is a friendly conversation between a human and an AI. The AI is talkative and provides lots of specific details from its context. If the AI does not know the answer to a question, it truthfully says it does not know.
-
-Current conversation:
 Human: I will provide you structured text.
 AI: Alright, I will parse it at the end as valid JSON.
 Human: You will parse text into valid JSON.
@@ -23,8 +21,8 @@ AI:'''
     req = {
         'model': 'llama-2-7b-chat.ggmlv3.q2_K.bin',
         'prompt': prompt,
-        'temperature': 0.75,
-        'n_gpu_layers': 33,
+        # 'temperature': 0.75,
+        # 'n_gpu_layers': 33,
     }
     
     async with aiohttp.ClientSession() as session:

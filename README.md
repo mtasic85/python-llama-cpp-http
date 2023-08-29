@@ -72,18 +72,22 @@ Simple text completion Call `/api/1.0/text/completion`:
 
 ```bash
 source venv/bin/activate
-python -B example_client_call.py | jq .
+python -B misc/example_client_call.py | jq .
 ```
 
 WebSocket stream `/api/1.0/text/completion`:
 
 ```bash
 source venv/bin/activate
-python -B example_client_stream.py | jq -R '. as $line | try (fromjson) catch $line'
+python -B misc/example_client_stream.py | jq -R '. as $line | try (fromjson) catch $line'
 ```
 
 ### Example Running Server
 
 ```bash
 python -m llama_cpp_http.server --backend clblast --models-path ~/models/ --llama-cpp-path ~/llama.cpp-clblast --allow-cache-prompt true --cache-prompt-db ~/models/llama_cpp_http_cache_prompt.sqlite
+```
+
+```bash
+gunicorn llama_cpp_http.server:get_app --bind 0.0.0.0:5000 --workers 1 --worker-class aiohttp.GunicornWebWorker --backend clblast --models-path ~/models/ --llama-cpp-path ~/llama.cpp-clblast --allow-cache-prompt true --cache-prompt-db ~/models/llama_cpp_http_cache_prompt.sqlite
 ```

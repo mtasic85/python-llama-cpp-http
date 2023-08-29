@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import shlex
 import asyncio
@@ -25,7 +26,7 @@ parser.add_argument('--port', help='http server port', default=5000, type=int)
 parser.add_argument('--timeout', help='llama.cpp timeout in seconds', default=300.0, type=float)
 parser.add_argument('--backend', help='llama.cpp execution backend', default='cpu', type=str, choices=['cpu', 'clblast', 'cublis'])
 parser.add_argument('--models-path', help='models directory path', default='~/models')
-parser.add_argument('--llama-cpp-path', help='llama.cpp directory path', default='~/llama.cpp')
+parser.add_argument('--llama-cpp-path', help='llama.cpp directory path', default='~/llama.cpp-clblast')
 parser.add_argument('--allow-cache-prompt', help='allow caching prompt for same prompt', type=str, default='false')
 parser.add_argument('--cache-prompt-db', help='database path for background caching of prompts', type=str, default='~/models/llama_cpp_http_cache_prompt.sqlite')
 cli_args = parser.parse_args()
@@ -192,6 +193,7 @@ def build_llama_cpp_cmd(device: int,
         '--prompt', shell_prompt,
     ])
 
+    cmd = [str(n) for n in cmd]
     cmd = ' '.join(cmd)
     return cmd
 
@@ -206,13 +208,18 @@ async def run_prompt(device: int,
                      n_gpu_layers: int,
                      top_k: int,
                      top_p: float,
-                     stop: str | list[str] | tuple[str]=None,
+                     stop: list[str] | None=None,
                      streaming: bool=False) -> AsyncIterator[(bool, str, str)]:
     proc = None
-    stdout = None
-    stderr = None
-    shell_prompt: str = shlex.quote(prompt)
+    stdout: bytes = b''
+    stderr: bytes = b'llama.cpp ' + model.encode()
     prompt_enc: bytes = prompt.encode()
+    shell_prompt: str = shlex.quote(prompt)
+    stop_enc = None if stop is None else [n.encode() for n in stop]
+    stopped: bool = False
+    read_stderr_task = None
+
+    print('? prompt:', repr(prompt))
 
     cmd: str = build_llama_cpp_cmd(
         device=device,
@@ -236,89 +243,96 @@ async def run_prompt(device: int,
             )
 
             if streaming:
-                stdout: bytes = b''
-                chunks_stdout: bytes = b''
-                stopped: bool = False
+                buf: bytes
+                text: str
 
+                # strip original prompt from return
                 while not proc.stdout.at_eof():
-                    buf: bytes = await proc.stdout.read(128)
+                    # stdout
+                    buf = await proc.stdout.read(16)
                     stdout += buf
 
                     # skip original prompt
-                    if len(stdout) < len(prompt_enc):
-                        continue
-                    
-                    if chunks_stdout == b'':
-                        # print('!', repr(prompt_enc))
-                        # print('!', repr(stdout))
-                        chunks_stdout = stdout[1 + len(prompt_enc):]
-                        d = len(stdout) - (1 + len(prompt_enc))
-                        buf = buf[d:]
+                    if len(stdout) > len(prompt_enc):
+                        break
 
-                    chunk: str = buf.decode('unicode-escape')
-                    chunks_stdout += buf
+                stdout = stdout[1 + len(prompt_enc):]
+
+                # return left-overs from stdout as buf
+                buf = stdout
+                text = buf.decode('unicode-escape')
+
+                res = {
+                    'id': id_,
+                    'status': 'chunk',
+                    'chunk': text,
+                    'done': False,
+                }
+
+                yield False, res, None
+
+                # read rest of tokens
+                while not proc.stdout.at_eof():
+                    buf = await proc.stdout.read(128)
+                    stdout += buf
+
+                    # FIXME: requires better implementation
+                    try:
+                        text = buf.decode('unicode-escape')
+                    except Exception as e:
+                        print('run_prompt buf.decode("unicode-escape") exception:', e)
+                        continue
                     
                     res = {
                         'id': id_,
                         'status': 'chunk',
-                        'chunk': chunk,
+                        'chunk': text,
                         'done': False,
                     }
 
                     yield False, res, None
 
-                    if isinstance(stop, (str, bytes)):
-                        stop_enc: bytes
-
-                        if isinstance(stop, str):
-                            stop_enc = stop.encode()
-                        elif isinstance(stop, bytes):
-                            stop_enc = stop
-
-                        if stop_inc in chunks_stdout:
-                            print('stopped:', stop)
-                            stopped = True
-                            stdout = stdout[:stdout.rindex(stop_inc)]
-                            break
-                    elif isinstance(stop, (list, tuple)):
-                        n_enc: bytes
-
-                        for n in stop:
-                            if isinstance(n, str):
-                                n_enc = n.encode()
-                            elif isinstance(n, bytes):
-                                n_enc = n
-                            else:
-                                raise ValueError(stop)
-
-                            if n_enc in chunks_stdout:
-                                print('stopped:', stop)
+                    # check for stop words
+                    if stop_enc:
+                        for n in stop_enc:
+                            if n in stdout:
+                                print('* stopped:', stop)
+                                stdout = stdout[:stdout.index(n)]
                                 stopped = True
-                                stdout = stdout[:stdout.rindex(n_enc)]
                                 break
 
                     if stopped:
                         break
 
-                    await asyncio.sleep(0.01)
-
-                stderr = await proc.stderr.read()
+                    await asyncio.sleep(0.05)
             else:
                 stdout, stderr = await proc.communicate()
+                stdout = stdout[1 + len(prompt_enc):]
+
+            if stopped:
+                try:
+                    proc.kill()
+                    await proc.wait()
+                    print('proc kill [stop]')
+                except Exception as e:
+                    print('proc kill [stop]:', e)
+                finally:
+                    proc = None
             
-            stdout = stdout[1 + len(prompt_enc):]
-            stdout = stdout.decode('unicode-escape').strip()
-            stderr = stderr.decode('unicode-escape').strip()
+            stdout = stdout.decode().strip()
+            stderr = stderr.decode().strip()
     except asyncio.TimeoutError as e:
         try:
             proc.kill()
+            await proc.wait()
+            print('proc kill [timeout]')
         except Exception as e:
-            print('proc kill:', e)
+            print('proc kill [timeout]:', e)
         finally:
             proc = None
 
-    # print('!!', repr(stdout))
-    # print('!!', repr(stderr))
+    print('!! stdout', repr(stdout))
+    print('!! stderr', repr(stderr))
 
     if cm.expired:
         res = {
@@ -343,13 +357,13 @@ async def post_api_1_0_text_completion(request, id_: str):
     
     model = data['model']
     prompt = data['prompt']
-    n_predict = str(data.get('n_predict', '-1'))
-    ctx_size = str(data.get('ctx_size', '2048'))
-    batch_size = str(data.get('batch_size', '512'))
-    temperature = str(data.get('temperature', '0.8'))
-    top_k = str(data.get('top_k', '40'))
-    top_p = str(data.get('top_p', '0.9'))
-    n_gpu_layers = str(data.get('n_gpu_layers', '0'))
+    n_predict = int(data.get('n_predict', '-1'))
+    ctx_size = int(data.get('ctx_size', '2048'))
+    batch_size = int(data.get('batch_size', '512'))
+    temperature = float(data.get('temperature', '0.8'))
+    top_k = int(data.get('top_k', '40'))
+    top_p = float(data.get('top_p', '0.9'))
+    n_gpu_layers = int(data.get('n_gpu_layers', '0'))
     stop = data.get('stop')
     
     # find avilable lock
@@ -441,20 +455,20 @@ async def post_api_1_0_text_completion(request, id_: str):
 async def _ws_text_completion_stream(ws, id_: str, data: dict):
     model = data['model']
     prompt = data['prompt']
-    n_predict = str(data.get('n_predict', '-1'))
-    ctx_size = str(data.get('ctx_size', '2048'))
-    batch_size = str(data.get('batch_size', '512'))
-    temperature = str(data.get('temperature', '0.8'))
-    top_k = str(data.get('top_k', '40'))
-    top_p = str(data.get('top_p', '0.9'))
-    n_gpu_layers = str(data.get('n_gpu_layers', '0'))
+    n_predict = int(data.get('n_predict', '-1'))
+    ctx_size = int(data.get('ctx_size', '2048'))
+    batch_size = int(data.get('batch_size', '512'))
+    temperature = float(data.get('temperature', '0.8'))
+    top_k = int(data.get('top_k', '40'))
+    top_p = float(data.get('top_p', '0.9'))
+    n_gpu_layers = int(data.get('n_gpu_layers', '0'))
     stop = data.get('stop')
     
     # find avilable lock
     t = 0
 
     while True:
-        if t > 0 and t % max(2, len(devices)) == 0:
+        if ALLOW_CACHE_PROMPT and t > 0 and t % max(2, len(devices)) == 0:
             results = await search_prompt_output_info(model, prompt)
             # print('!', t, results)
 
@@ -596,10 +610,12 @@ async def get_api_1_0_text_completion(request, id_: str):
                 task = tg.create_task(coro)
             elif msg.type == aiohttp.WSMsgType.ERROR:
                 print(f'ws connection closed with exception {ws.exception()}')
+                await ws.close()
                 break
             else:
                 print(f'ws msg.type:', msg.type)
 
+    await task
     print('websocket connection closed')
     return ws
 
@@ -622,7 +638,7 @@ async def task_queue_middleware(request, handler):
 
     return resp
 
-def get_app():
+async def get_app():
     app = web.Application(middlewares=[task_queue_middleware])
     app.add_routes(routes)
     return app
@@ -631,5 +647,5 @@ if __name__ == '__main__':
     print(cli_args)
 
     init_devices()
-    app = get_app()
+    app = asyncio.run(get_app())
     web.run_app(app, host=HOST, port=PORT)

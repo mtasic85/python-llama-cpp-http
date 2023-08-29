@@ -1,26 +1,30 @@
 import json
 import random
-import logging
 from typing import Any, List, Mapping, Optional, Iterator
 
 import requests
+from websockets.sync.client import connect
 from langchain.callbacks.manager import CallbackManagerForLLMRun
 from langchain.llms.base import LLM
 from langchain.llms.utils import enforce_stop_tokens
 from langchain.schema.output import GenerationChunk
-from websockets.sync.client import connect
 
 from langchain.embeddings.base import Embeddings
 from langchain.pydantic_v1 import BaseModel
 
-logger = logging.getLogger(__name__)
-
 
 class LlamaCppEmbeddingsClient(Embeddings, BaseModel):
-    """Fake embedding model."""
-
-    size: int
-    """The size of the embedding vector."""
+    endpoint: str | list[str] | tuple[str] = 'http://127.0.0.1:5000'
+    model: str = ''
+    n_predict: int = -1
+    ctx_size: int = 2048
+    batch_size: int = 512
+    temperature: float = 0.8
+    top_k: int = 40
+    top_p: float = 0.9
+    n_gpu_layers: int = 0
+    streaming: bool = True
+    verbose: bool = False
 
     def _get_embedding(self) -> List[float]:
         return list(np.random.normal(size=self.size))
@@ -108,9 +112,6 @@ class LlamaCppClient(LLM):
             assert res['status'] == 'success'
             text = res['output']
 
-            if self.verbose:
-                logger.debug(msg['info'])
-
         if stop is not None:
             text = enforce_stop_tokens(text, stop)
         
@@ -128,6 +129,7 @@ class LlamaCppClient(LLM):
         It also calls the callback manager's on_llm_new_token event with
         similar parameters to the OpenAI LLM class method of the same name.
         """
+        
         logprobs = None
 
         if isinstance(self.endpoint, (list, tuple)):
@@ -149,22 +151,26 @@ class LlamaCppClient(LLM):
             'n_gpu_layers': self.n_gpu_layers,
             'stop': stop,
         }
-
-        with connect(url, open_timeout=300, close_timeout=300) as ws:
+        
+        with connect(url, open_timeout=30.0, close_timeout=10.0) as ws:
             ws.send(json.dumps(req))
             
             for msg in ws:
                 res = json.loads(msg)
 
                 if res['status'] == 'error':
+                    ws.close()
                     raise Exception(res)
                 elif res['status'] == 'success':
+                    ws.close()
                     break
                 elif res['status'] != 'chunk':
                     continue
 
+                text = res['chunk']
+
                 chunk = GenerationChunk(
-                    text=res['chunk'],
+                    text=text,
                     generation_info={'logprobs': logprobs},
                 )
 
@@ -176,6 +182,3 @@ class LlamaCppClient(LLM):
                         verbose=self.verbose,
                         log_probs=logprobs,
                     )
-
-        if self.verbose:
-            logger.debug(res['info'])
