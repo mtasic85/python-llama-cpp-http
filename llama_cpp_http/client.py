@@ -1,6 +1,5 @@
 import json
 import random
-# import logging
 from typing import Any, List, Mapping, Optional, Iterator
 
 import requests
@@ -9,8 +8,31 @@ from langchain.callbacks.manager import CallbackManagerForLLMRun
 from langchain.llms.base import LLM
 from langchain.llms.utils import enforce_stop_tokens
 from langchain.schema.output import GenerationChunk
+# from langchain.embeddings.base import Embeddings
+# from langchain.pydantic_v1 import BaseModel
 
-# logger = logging.getLogger(__name__)
+
+# class LlamaCppEmbeddingsClient(Embeddings, BaseModel):
+#     endpoint: str | list[str] | tuple[str] = 'http://127.0.0.1:5000'
+#     model: str = ''
+#     n_predict: int = -1
+#     ctx_size: int = 2048
+#     batch_size: int = 512
+#     temperature: float = 0.8
+#     top_k: int = 40
+#     top_p: float = 0.9
+#     n_gpu_layers: int = 0
+#     streaming: bool = True
+#     verbose: bool = False
+#
+#     def _get_embedding(self) -> List[float]:
+#         return list(np.random.normal(size=self.size))
+#
+#     def embed_documents(self, texts: List[str]) -> List[List[float]]:
+#         return [self._get_embedding() for _ in texts]
+#
+#     def embed_query(self, text: str) -> List[float]:
+#         return self._get_embedding()
 
 
 class LlamaCppClient(LLM):
@@ -89,9 +111,6 @@ class LlamaCppClient(LLM):
             assert res['status'] == 'success'
             text = res['output']
 
-            # if self.verbose:
-            #     logger.debug(msg['info'])
-
         if stop is not None:
             text = enforce_stop_tokens(text, stop)
         
@@ -162,6 +181,3 @@ class LlamaCppClient(LLM):
                         verbose=self.verbose,
                         log_probs=logprobs,
                     )
-
-        # if self.verbose:
-        #     logger.debug(res['info'])

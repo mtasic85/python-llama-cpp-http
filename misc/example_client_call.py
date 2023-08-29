@@ -21,8 +21,8 @@ AI:'''
     req = {
         'model': 'llama-2-7b-chat.ggmlv3.q2_K.bin',
         'prompt': prompt,
-        'temperature': 0.75,
-        'n_gpu_layers': 33,
+        # 'temperature': 0.75,
+        # 'n_gpu_layers': 33,
     }
     
     async with aiohttp.ClientSession() as session:
