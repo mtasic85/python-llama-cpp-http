@@ -10,7 +10,26 @@ from langchain.llms.utils import enforce_stop_tokens
 from langchain.schema.output import GenerationChunk
 from websockets.sync.client import connect
 
+from langchain.embeddings.base import Embeddings
+from langchain.pydantic_v1 import BaseModel
+
 logger = logging.getLogger(__name__)
+
+
+class LlamaCppEmbeddingsClient(Embeddings, BaseModel):
+    """Fake embedding model."""
+
+    size: int
+    """The size of the embedding vector."""
+
+    def _get_embedding(self) -> List[float]:
+        return list(np.random.normal(size=self.size))
+
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        return [self._get_embedding() for _ in texts]
+
+    def embed_query(self, text: str) -> List[float]:
+        return self._get_embedding()
 
 
 class LlamaCppClient(LLM):
