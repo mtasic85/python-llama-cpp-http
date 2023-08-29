@@ -1,4 +1,5 @@
 import json
+import time
 import random
 from typing import Any, List, Mapping, Optional, Iterator
 
@@ -189,4 +190,5 @@ class LlamaCppClient(LLM):
             except TimeoutError as e:
                 print('timeout:', e)
                 print('retrying')
+                time.sleep(random.random() * 10)
                 continue
