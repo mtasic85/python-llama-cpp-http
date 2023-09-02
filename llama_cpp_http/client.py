@@ -188,7 +188,13 @@ class LlamaCppClient(LLM):
                                 log_probs=logprobs,
                             )
             except TimeoutError as e:
-                print('timeout:', e)
+                print('TimeoutError:', e)
                 print('retrying')
                 time.sleep(random.random() * 10)
                 continue
+            except Exception as e:
+                print('Exception:', e)
+                print('retrying')
+                time.sleep(random.random() * 10)
+                continue
+
