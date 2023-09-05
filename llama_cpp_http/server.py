@@ -68,9 +68,9 @@ def init_devices():
     elif BACKEND in ('clblast', 'cublis'):
         if OVERRIDE_PLATFORMS_DEVICES:
             pis_dis = OVERRIDE_PLATFORMS_DEVICES.split(',')
-            
+
             for pi_di in pis_dis:
-                pi, di = pis_dis.split(':')
+                pi, di = pi_di.split(':')
                 pi = int(pi)
                 di = int(di)
                 n = (pi, di, None, None)
