@@ -602,7 +602,9 @@ async def get_api_1_0_text_completion(request, id_: str):
 
     async with asyncio.TaskGroup() as tg:
         async for msg in ws:
-            if msg.type == aiohttp.WSMsgType.TEXT:
+            if msg.type == aiohttp.WSMsgType.PING:
+                await ws.pong(msg.data)
+            elif msg.type == aiohttp.WSMsgType.TEXT:
                 data = json.loads(msg.data)
 
                 # run in background
