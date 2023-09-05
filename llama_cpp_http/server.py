@@ -4,6 +4,7 @@ import json
 import shlex
 import asyncio
 import argparse
+from typing import Any
 from uuid import uuid4
 from pprint import pprint
 from random import choice
@@ -29,6 +30,7 @@ parser.add_argument('--models-path', help='models directory path', default='~/mo
 parser.add_argument('--llama-cpp-path', help='llama.cpp directory path', default='~/llama.cpp-clblast')
 parser.add_argument('--allow-cache-prompt', help='allow caching prompt for same prompt', type=str, default='false')
 parser.add_argument('--cache-prompt-db', help='database path for background caching of prompts', type=str, default='~/models/llama_cpp_http_cache_prompt.sqlite')
+parser.add_argument('--override-platforms-devices', help='Custom platforms and devices indexes, example: 1:0,1:1', type=str, required=False)
 cli_args = parser.parse_args()
 
 HOST = cli_args.host
@@ -37,6 +39,7 @@ TIMEOUT = cli_args.timeout
 BACKEND = cli_args.backend
 MODELS_PATH = cli_args.models_path
 LLAMA_CPP_PATH = cli_args.llama_cpp_path
+OVERRIDE_PLATFORMS_DEVICES = cli_args.override_platforms_devices
 
 if cli_args.allow_cache_prompt in ('true', 'True', '1'):
     ALLOW_CACHE_PROMPT = True
@@ -63,12 +66,22 @@ def init_devices():
         n = (-1, -1, None, None)
         devices.append(n)
     elif BACKEND in ('clblast', 'cublis'):
-        # number of devices depend on how many OpenCL finds
-        # this also applies to NVIDIA cuBLIS / cuda devices
-        for pi, p in enumerate(cl.get_platforms()):
-            for di, d in enumerate(p.get_devices()):
-                n = (pi, di, p, d)
+        if OVERRIDE_PLATFORMS_DEVICES:
+            pis_dis = OVERRIDE_PLATFORMS_DEVICES.split(',')
+            
+            for pi_di in pis_dis:
+                pi, di = pis_dis.split(':')
+                pi = int(pi)
+                di = int(di)
+                n = (pi, di, None, None)
                 devices.append(n)
+        else:
+            # number of devices depend on how many OpenCL finds
+            # this also applies to NVIDIA cuBLIS / cuda devices
+            for pi, p in enumerate(cl.get_platforms()):
+                for di, d in enumerate(p.get_devices()):
+                    n = (pi, di, p, d)
+                    devices.append(n)
     else:
         raise ValueError(BACKEND)
 
@@ -151,7 +164,7 @@ async def search_prompt_output_info(model: str, prompt: str) -> list[dict]:
         results = [(r.id, r.prompt, r.output, r.info) for r in results]
         return results
 
-def build_llama_cpp_cmd(device: int,
+def build_llama_cpp_cmd(device: (int, int, Any, Any),
                         prompt: str,
                         model: str,
                         n_predict: int,
@@ -169,7 +182,7 @@ def build_llama_cpp_cmd(device: int,
         pass
     elif BACKEND == 'clblast':
         cmd.extend([
-            f'GGML_OPENCL_PLATFORM={pi}', 
+            f'GGML_OPENCL_PLATFORM={pi}',
             f'GGML_OPENCL_DEVICE={di}',
         ])
     elif BACKEND == 'clblis':
