@@ -3,7 +3,8 @@ from llama_cpp_http.client import LlamaCppClient
 
 llm = LlamaCppClient(
     endpoint='ws://127.0.0.1:5000',
-    model='llama-2-7b-chat.ggmlv3.q2_K.bin',
+    # model='llama-2-7b-chat.ggmlv3.q2_K.bin',
+    model='llama-2-7b-chat.Q3_K_M.gguf',
     temperature=0.75,
     n_predict=512,
     ctx_size=2048,

@@ -19,7 +19,8 @@ Human: Parse text and output only valid JSON with fields `"car_model": "string",
 AI:'''
     
     req = {
-        'model': 'llama-2-7b-chat.ggmlv3.q2_K.bin',
+        # 'model': 'llama-2-7b-chat.ggmlv3.q2_K.bin',
+        'model': 'llama-2-7b-chat.Q3_K_M.gguf',
         'prompt': prompt,
         # 'temperature': 0.75,
         # 'n_gpu_layers': 33,
