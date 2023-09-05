@@ -195,6 +195,7 @@ def build_llama_cpp_cmd(device: int,
 
     cmd = [str(n) for n in cmd]
     cmd = ' '.join(cmd)
+    print('! cmd:', cmd)
     return cmd
 
 async def run_prompt(device: int,
