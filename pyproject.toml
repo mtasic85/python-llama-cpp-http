@@ -6,10 +6,14 @@ authors = ["Marko Tasic <mtasic85@gmail.com>"]
 license = "MIT"
 readme = "README.md"
 packages = [{include = "llama_cpp_http"}]
+pyopencl = { version = "^2023.1.2", optional = true }
+
+[tool.poetry.extras]
+pyopencl = ["pyopencl"]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-pyopencl = "^2023.1.2"
+# pyopencl = "^2023.1.2"
 aiohttp = {extras = ["speedups"], version = "^3.8.5"}
 async-timeout = "^4.0.3"
 websockets = "^11.0.3"
@@ -17,7 +21,6 @@ requests = "^2.31.0"
 langchain = "^0.0.268"
 pony = "^0.7.16"
 gunicorn = "^21.2.0"
-
 
 [build-system]
 requires = ["poetry-core"]
