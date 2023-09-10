@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v0.2.1
+
+Changed:
+    - Eager/optimistic model loading.
+    - Disable llama.cpp log traces.
+
 ## v0.2.0
 
 Added:
