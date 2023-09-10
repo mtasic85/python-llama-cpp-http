@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "llama_cpp_http"
-version = "0.1.1"
+version = "0.2.0"
 description = "Python llama.cpp HTTP Server and LangChain LLM Client"
 authors = ["Marko Tasic <mtasic85@gmail.com>"]
 license = "MIT"
@@ -18,8 +18,8 @@ async-timeout = "^4.0.3"
 websockets = "^11.0.3"
 requests = "^2.31.0"
 langchain = "^0.0.268"
-pony = "^0.7.16"
 gunicorn = "^21.2.0"
+uvloop = "^0.17.0"
 
 [build-system]
 requires = ["poetry-core"]

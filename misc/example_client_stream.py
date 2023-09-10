@@ -1,21 +1,29 @@
 import json
 import asyncio
 
+try:
+    import uvloop
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+except ImportError:
+    pass
+
 import aiohttp
 
 async def main():
-    prompt = R'''The following is a friendly conversation between a human and an AI. The AI is talkative and provides lots of specific details from its context. If the AI does not know the answer to a question, it truthfully says it does not know.
-Human: Lets chat about any topic I mention. You will find that they also tend to be more concise. Concise writing means using the fewest words possible to convey an idea clearly.
-AI: Alright, I will answer any of your questions to be concise and clear.
-Human: How are you?
-AI:'''
+    prompt = (
+        'The following is a friendly conversation between a human and an AI. The AI is talkative and provides lots of specific details from its context. If the AI does not know the answer to a question, it truthfully says it does not know.'
+        'Human: Lets chat about any topic I mention. You will find that they also tend to be more concise. Concise writing means using the fewest words possible to convey an idea clearly.'
+        'AI: Alright, I will answer any of your questions to be concise and clear.'
+        'Human: How are you?'
+        'AI:'
+    )
     
     req = {
-        # 'model': 'llama-2-7b-chat.ggmlv3.q2_K.bin',
-        'model': 'llama-2-7b-chat.Q3_K_M.gguf',
+        'model': 'llama-2-7b-chat.Q2_K.gguf',
+        'n_predict': 512,
         'prompt': prompt,
         'temperature': 0.75,
-        # 'n_gpu_layers': 33,
+        'n_gpu_layers': 33,
         # 'stop': ['Human:']
     }
     

@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## v0.2.0
+
+Added:
+    - Using `uvloop` speed interaction with `llama.cpp` ~2x.
+
+Changed:
+    - Does not return `info` field in responses as `stderr` from `llama.cpp`.
+
+Removed:
+    - `pyopencl` usage at in code.
+    - Caching using `PonyORM` and `sqlite3`.
+
 ## v0.1.1
 
 Added:

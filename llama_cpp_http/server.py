@@ -3,6 +3,13 @@ import sys
 import json
 import shlex
 import asyncio
+
+try:
+    import uvloop
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+except ImportError:
+    pass
+
 import argparse
 from typing import Any
 from uuid import uuid4
@@ -11,12 +18,10 @@ from random import choice
 from hashlib import sha256
 from collections.abc import AsyncIterator
 
-import pyopencl as cl
 import aiohttp
 from aiohttp import web
 from aiohttp.web import middleware
 from async_timeout import timeout
-from pony import orm
 
 #
 # env
@@ -25,12 +30,10 @@ parser = argparse.ArgumentParser(prog='server', description='Python llama.cpp HT
 parser.add_argument('--host', help='http server host', default='0.0.0.0')
 parser.add_argument('--port', help='http server port', default=5000, type=int)
 parser.add_argument('--timeout', help='llama.cpp timeout in seconds', default=300.0, type=float)
-parser.add_argument('--backend', help='llama.cpp execution backend', default='cpu', type=str, choices=['cpu', 'clblast', 'cublis'])
-parser.add_argument('--models-path', help='models directory path', default='~/models')
-parser.add_argument('--llama-cpp-path', help='llama.cpp directory path', default='~/llama.cpp-clblast')
-parser.add_argument('--allow-cache-prompt', help='allow caching prompt for same prompt', type=str, default='false')
-parser.add_argument('--cache-prompt-db', help='database path for background caching of prompts', type=str, default='~/models/llama_cpp_http_cache_prompt.sqlite')
-parser.add_argument('--override-platforms-devices', help='Custom platforms and devices indexes, example: 1:0,1:1', type=str, required=False)
+parser.add_argument('--backend', help='llama.cpp execution backend', default='cpu', type=str, choices=['cpu', 'clblast', 'hipblas', 'cublas'])
+parser.add_argument('--models-path', help='models directory path', default='models')
+parser.add_argument('--llama-cpp-path', help='llama.cpp directory path', default='llama.cpp')
+parser.add_argument('--platforms-devices', help='Custom platforms and devices indexes, example: 0:0,0:1', type=str, required=False)
 cli_args = parser.parse_args()
 
 HOST = cli_args.host
@@ -39,22 +42,13 @@ TIMEOUT = cli_args.timeout
 BACKEND = cli_args.backend
 MODELS_PATH = cli_args.models_path
 LLAMA_CPP_PATH = cli_args.llama_cpp_path
-OVERRIDE_PLATFORMS_DEVICES = cli_args.override_platforms_devices
-
-if cli_args.allow_cache_prompt in ('true', 'True', '1'):
-    ALLOW_CACHE_PROMPT = True
-elif cli_args.allow_cache_prompt in ('false', 'False', '0'):
-    ALLOW_CACHE_PROMPT = False
-else:
-    raise ValueError(f'--allow-cache-prompt {cli_args.allow_cache_prompt}')
-
-CACHE_PROMPT_DB = cli_args.cache_prompt_db
+PLATFORMS_DEVICES = cli_args.platforms_devices
 
 #
 # devices
 #
-devices = []
-devices_locks = []
+devices: list[(int, int, Any, Any)] = []
+devices_locks: list[asyncio.Lock] = []
 task_queue = set()
 
 def init_devices():
@@ -65,23 +59,16 @@ def init_devices():
         # allow only ONE "device" concurrently
         n = (-1, -1, None, None)
         devices.append(n)
-    elif BACKEND in ('clblast', 'cublis'):
-        if OVERRIDE_PLATFORMS_DEVICES:
-            pis_dis = OVERRIDE_PLATFORMS_DEVICES.split(',')
+    elif BACKEND in ('clblast', 'hipblas', 'cublas'):
+        # parse devices for example '0:0,0:1,1:0,1:1,2:0,2:1,2:2,2:3'
+        pis_dis = PLATFORMS_DEVICES.split(',')
 
-            for pi_di in pis_dis:
-                pi, di = pi_di.split(':')
-                pi = int(pi)
-                di = int(di)
-                n = (pi, di, None, None)
-                devices.append(n)
-        else:
-            # number of devices depend on how many OpenCL finds
-            # this also applies to NVIDIA cuBLIS / cuda devices
-            for pi, p in enumerate(cl.get_platforms()):
-                for di, d in enumerate(p.get_devices()):
-                    n = (pi, di, p, d)
-                    devices.append(n)
+        for pi_di in pis_dis:
+            pi, di = pi_di.split(':')
+            pi = int(pi)
+            di = int(di)
+            n = (pi, di, None, None)
+            devices.append(n)
     else:
         raise ValueError(BACKEND)
 
@@ -91,78 +78,6 @@ def init_devices():
 
     print('devices_locks:')
     pprint(devices_locks)
-
-#
-# background prompting and caching
-#
-if ALLOW_CACHE_PROMPT:
-    db = orm.Database()
-
-    class PromptOutputInfo(db.Entity):
-        id = orm.PrimaryKey(str)
-        model = orm.Required(str, index=True)
-        prompt_hash = orm.Required(str, index=True)
-        prompt = orm.Required(str)
-        output_hash = orm.Required(str)
-        output = orm.Required(str)
-        info_hash = orm.Required(str)
-        info = orm.Required(str)
-
-    db.bind(provider='sqlite', filename=CACHE_PROMPT_DB, create_db=True)
-    db.generate_mapping(create_tables=True)
-    orm.set_sql_debug(False)
-
-async def cache_prompt_output_info(id_: str,
-                                   model: str,
-                                   prompt: str,
-                                   output: str,
-                                   info: str):
-    with orm.db_session:
-        # prompt_hash
-        m = sha256()
-        m.update(prompt.encode())
-        prompt_hash = m.hexdigest()
-
-        # output_hash
-        m = sha256()
-        m.update(output.encode())
-        output_hash = m.hexdigest()
-
-        # info_hash
-        m = sha256()
-        m.update(info.encode())
-        info_hash = m.hexdigest()
-
-        r = PromptOutputInfo(
-            id=id_,
-            model=model,
-            prompt=prompt,
-            prompt_hash=prompt_hash,
-            output=output,
-            output_hash=output_hash,
-            info=info,
-            info_hash=info_hash,
-        )
-
-        orm.commit()
-
-async def search_prompt_output_info(model: str, prompt: str) -> list[dict]:
-    with orm.db_session:
-        # prompt_hash
-        m = sha256()
-        m.update(prompt.encode())
-        prompt_hash = m.hexdigest()
-
-        sql = R'''
-            SELECT * FROM PromptOutputInfo p
-            WHERE
-                p.model LIKE $model AND
-                p.prompt_hash LIKE $prompt_hash
-        '''
-
-        results = PromptOutputInfo.select_by_sql(sql)
-        results = [(r.id, r.prompt, r.output, r.info) for r in results]
-        return results
 
 def build_llama_cpp_cmd(device: (int, int, Any, Any),
                         prompt: str,
@@ -185,7 +100,9 @@ def build_llama_cpp_cmd(device: (int, int, Any, Any),
             f'GGML_OPENCL_PLATFORM={pi}',
             f'GGML_OPENCL_DEVICE={di}',
         ])
-    elif BACKEND == 'clblis':
+    elif BACKEND == 'hipblas':
+        pass
+    elif BACKEND == 'clblas':
         pass
     else:
         raise ValueError(BACKEND)
@@ -211,7 +128,7 @@ def build_llama_cpp_cmd(device: (int, int, Any, Any),
     print('! cmd:', cmd)
     return cmd
 
-async def run_prompt(device: int,
+async def run_prompt(device: (int, int, Any, Any),
                      id_: str,
                      prompt: str,
                      model: str,
@@ -318,7 +235,7 @@ async def run_prompt(device: int,
                     if stopped:
                         break
 
-                    await asyncio.sleep(0.05)
+                    await asyncio.sleep(0.1)
             else:
                 stdout, stderr = await proc.communicate()
                 stdout = stdout[1 + len(prompt_enc):]
@@ -346,7 +263,7 @@ async def run_prompt(device: int,
             proc = None
 
     print('!! stdout', repr(stdout))
-    print('!! stderr', repr(stderr))
+    # print('!! stderr', repr(stderr))
 
     if cm.expired:
         res = {
@@ -384,24 +301,6 @@ async def post_api_1_0_text_completion(request, id_: str):
     t = 0
 
     while True:
-        if ALLOW_CACHE_PROMPT and t > 0 and t % max(2, len(devices)) == 0:
-            results = await search_prompt_output_info(model, prompt)
-            # print('!', t, results)
-
-            if results:
-                print(f'trial {t}, returning from cache')
-                id_, prompt, output, info = choice(results)
-
-                res = {
-                    'id': id_,
-                    'status': 'success',
-                    **data,
-                    'output': output,
-                    'info': info,
-                }
-
-                return web.json_response(res)
-
         for dl in devices_locks:
             device, lock = dl
             pi, di, p, d = device
@@ -451,7 +350,8 @@ async def post_api_1_0_text_completion(request, id_: str):
 
     # post-process
     output = stdout
-    info = stderr
+    # info = stderr
+    info = None
 
     res = {
         'id': id_,
@@ -461,9 +361,6 @@ async def post_api_1_0_text_completion(request, id_: str):
         'info': info,
     }
 
-    if ALLOW_CACHE_PROMPT:
-        await cache_prompt_output_info(id_, model, prompt, output, info)
-    
     return web.json_response(res)
 
 async def _ws_text_completion_stream(ws, id_: str, data: dict):
@@ -482,39 +379,6 @@ async def _ws_text_completion_stream(ws, id_: str, data: dict):
     t = 0
 
     while True:
-        if ALLOW_CACHE_PROMPT and t > 0 and t % max(2, len(devices)) == 0:
-            results = await search_prompt_output_info(model, prompt)
-            # print('!', t, results)
-
-            if results:
-                print(f'trial {t}, returning from cache')
-                id_, prompt, output, info = choice(results)
-
-                # simulate streaming
-                chunk = output
-
-                res = {
-                    'id': id_,
-                    'status': 'chunk',
-                    'chunk': chunk,
-                    'done': False,
-                }
-
-                await ws.send_json(res)
-
-                res = {
-                    'id': id_,
-                    'status': 'success',
-                    **data,
-                    'output': output,
-                    'info': info,
-                    'done': True
-                }
-
-                await ws.send_json(res)
-                await ws.close()
-                return
-
         for dl in devices_locks:
             device, lock = dl
             pi, di, p, d = device
@@ -591,7 +455,8 @@ async def _ws_text_completion_stream(ws, id_: str, data: dict):
 
     # post-process
     output = stdout
-    info = stderr
+    # info = stderr
+    info = None
 
     res = {
         'id': id_,
@@ -601,9 +466,6 @@ async def _ws_text_completion_stream(ws, id_: str, data: dict):
         'info': info,
         'done': True
     }
-
-    if ALLOW_CACHE_PROMPT:
-        await cache_prompt_output_info(id_, model, prompt, output, info)
 
     await ws.send_json(res)
     await ws.close()

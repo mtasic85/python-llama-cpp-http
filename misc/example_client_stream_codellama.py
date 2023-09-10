@@ -1,6 +1,12 @@
 import json
 import asyncio
 
+try:
+    import uvloop
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+except ImportError:
+    pass
+
 import aiohttp
 
 async def main():
@@ -27,13 +33,7 @@ Human: Parse instruction "Upload files" as valid JSON, and end conversation imme
 AI:'''
     
     req = {
-        'model': 'llama-2-7b-chat.Q3_K_M.gguf',
-        # 'model': 'llama-2-7b-chat.ggmlv3.q2_K.bin',
-        # 'model': 'codellama-7b-instruct.ggmlv3.Q2_K.bin',
-        # 'model': 'codellama-7b.Q2_K.gguf',
-        # 'model': 'codellama-7b.Q3_K_S.gguf',
-        # 'model': 'codellama-7b-instruct.Q2_K.gguf',
-        # 'model': 'codellama-7b-instruct.Q3_K_M.gguf',
+        'model': 'llama-2-7b-chat.Q2_K.gguf',
         'prompt': prompt,
         'temperature': 0.0,
         'n_gpu_layers': 32,
