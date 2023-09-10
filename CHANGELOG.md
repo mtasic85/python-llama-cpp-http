@@ -7,3 +7,4 @@ Added:
     - HTTP Client for LangChain based on `websockets` for sync calls.
     - `pyopencl` is used to determin available **OpenCL** devices (GPUs).
     - Instructions in `LLAMA_CPP.md` how to build [llama.cpp](https://github.com/ggerganov/llama.cpp) w/o accelaration.
+    - Cahcing using `PonyORM` and `sqlite3`.

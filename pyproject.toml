@@ -6,7 +6,7 @@ authors = ["Marko Tasic <mtasic85@gmail.com>"]
 license = "MIT"
 readme = "README.md"
 packages = [{include = "llama_cpp_http"}]
-pyopencl = { version = "^2023.1.2", optional = true }
+# pyopencl = { version = "^2023.1.2", optional = true }
 
 [tool.poetry.extras]
 pyopencl = ["pyopencl"]
