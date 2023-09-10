@@ -13,7 +13,6 @@ pyopencl = ["pyopencl"]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-# pyopencl = "^2023.1.2"
 aiohttp = {extras = ["speedups"], version = "^3.8.5"}
 async-timeout = "^4.0.3"
 websockets = "^11.0.3"
