@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.1.1
+
+Added:
+    - Homepage URL.
+    - Repository URL.
+
+Removed:
+    - Removed `pyopencl` package from requirements.
+
 ## v0.1.0
 
 Added:
