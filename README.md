@@ -1,17 +1,15 @@
 # python-llama-cpp-http
 
+<!--
 [![Build][build-image]]()
 [![Status][status-image]][pypi-project-url]
 [![Stable Version][stable-ver-image]][pypi-project-url]
 [![Coverage][coverage-image]]()
 [![Python][python-ver-image]][pypi-project-url]
 [![License][mit-image]][mit-url]
-
-## Installation
-
-```bash
-pip install llama_cpp_http
-```
+-->
+[![Supported Versions](https://img.shields.io/pypi/pyversions/llama_cpp_http)](https://pypi.org/project/llama_cpp_http)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 Python HTTP Server and [LangChain](https://python.langchain.com) LLM Client for [llama.cpp](https://github.com/ggerganov/llama.cpp).
 
@@ -19,9 +17,15 @@ Server has only two routes:
 - **call**: for a prompt get whole text completion at once: `POST` `/api/1.0/text/completion`
 - **stream**: for a prompt get text chunks via WebSocket: `GET` `/api/1.0/text/completion`
 
-LangChain LLM Client has support for sync calls only based on Python packages `requirements` and `websockets`.
+LangChain LLM Client has support for sync calls only based on Python packages `requests` and `websockets`.
 
-## Setup llama.cpp
+## Install
+
+```bash
+pip install llama_cpp_http
+```
+
+## Manual install
 
 Assumption is that **GPU driver**, and **OpenCL** / **CUDA** libraries are installed.
 
@@ -47,20 +51,6 @@ cd python-llama-cpp-http
 
 Make sure you are inside cloned repo directory `python-llama-cpp-http`.
 
-### Clone and compile llama.cpp
-
-```bash
-git clone https://github.com/ggerganov/llama.cpp llama.cpp
-cd llama.cpp
-make -j
-```
-
-## Download Meta's Llama 2 7B model
-
-Download GGUF model from https://huggingface.co/TheBloke/Llama-2-7B-GGUF to local directory `models`.
-
-Our advice is to use model https://huggingface.co/TheBloke/Llama-2-7B-GGUF/blob/main/llama-2-7b.Q2_K.gguf with minimum requirements, so it can fit in both RAM/VRAM.
-
 ### Setup python venv
 
 ```bash
@@ -70,26 +60,37 @@ python -m ensurepip --upgrade
 pip install -U .
 ```
 
-### Run Server
+## Clone and compile llama.cpp
 
 ```bash
-source venv/bin/activate
+git clone https://github.com/ggerganov/llama.cpp llama.cpp
+cd llama.cpp
+make -j
+```
+
+## Download Meta's Llama 2 7B Model
+
+Download GGUF model from https://huggingface.co/TheBloke/Llama-2-7B-GGUF to local directory `models`.
+
+Our advice is to use model https://huggingface.co/TheBloke/Llama-2-7B-GGUF/blob/main/llama-2-7b.Q2_K.gguf with minimum requirements, so it can fit in both RAM/VRAM.
+
+## Run Server
+
+```bash
 python -m llama_cpp_http.server --backend cpu --models-path ./models --llama-cpp-path ./llama.cpp
 ```
 
-### Run Client Examples
+## Run Client Examples
 
 1) Simple text completion call `/api/1.0/text/completion`:
 
 ```bash
-source venv/bin/activate
 python -B misc/example_client_call.py | jq .
 ```
 
 2) WebSocket stream `/api/1.0/text/completion`:
 
 ```bash
-source venv/bin/activate
 python -B misc/example_client_stream.py | jq -R '. as $line | try (fromjson) catch $line'
 ```
 
