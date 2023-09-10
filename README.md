@@ -8,7 +8,7 @@
 [![Python][python-ver-image]][pypi-project-url]
 [![License][mit-image]][mit-url]
 -->
-[![Downloads](https://static.pepy.tech/badge/llama_cpp_http/month)](https://pepy.tech/project/llama_cpp_http)
+[![Downloads](https://img.shields.io/pypi/dm/llama_cpp_http)](https://pypistats.org/packages/llama_cpp_http)
 [![Supported Versions](https://img.shields.io/pypi/pyversions/llama_cpp_http)](https://pypi.org/project/llama_cpp_http)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
