@@ -49,25 +49,27 @@ PLATFORMS_DEVICES = cli_args.platforms_devices
 #
 devices: list[(int, int, Any, Any)] = []
 devices_locks: list[asyncio.Lock] = []
+devices_procs: list[tuple[str | None, asyncio.subprocess.Process | None]] = []
 task_queue = set()
 
 def init_devices():
     global devices
     global devices_locks
+    global devices_procs
     
     if BACKEND == 'cpu':
         # allow only ONE "device" concurrently
-        n = (-1, -1, None, None)
+        n = (0, -1, -1)
         devices.append(n)
     elif BACKEND in ('clblast', 'hipblas', 'cublas'):
         # parse devices for example '0:0,0:1,1:0,1:1,2:0,2:1,2:2,2:3'
         pis_dis = PLATFORMS_DEVICES.split(',')
 
-        for pi_di in pis_dis:
+        for i, pi_di in enumerate(pis_dis):
             pi, di = pi_di.split(':')
             pi = int(pi)
             di = int(di)
-            n = (pi, di, None, None)
+            n = (i, pi, di)
             devices.append(n)
     else:
         raise ValueError(BACKEND)
@@ -76,10 +78,16 @@ def init_devices():
     for n in devices:
         devices_locks.append((n, asyncio.Lock()))
 
+    # create devices_procs and set all values to None
+    devices_procs = [(None, None)] * len(devices)
+
     print('devices_locks:')
     pprint(devices_locks)
+    
+    print('devices_procs:')
+    pprint(devices_procs)
 
-def build_llama_cpp_cmd(device: (int, int, Any, Any),
+def build_llama_cpp_cmd(device: tuple[int, int, int],
                         prompt: str,
                         model: str,
                         n_predict: int,
@@ -89,7 +97,7 @@ def build_llama_cpp_cmd(device: (int, int, Any, Any),
                         n_gpu_layers: int,
                         top_k: int,
                         top_p: float) -> str:
-    pi, di, p, d = device
+    index, pi, di = device
     shell_prompt = shlex.quote(prompt)
     cmd = []
 
@@ -120,6 +128,7 @@ def build_llama_cpp_cmd(device: (int, int, Any, Any),
         # '--mlock',
         # '--no-mmap',
         '--simple-io',
+        '--log-disable',
         '--prompt', shell_prompt,
     ])
 
@@ -128,7 +137,7 @@ def build_llama_cpp_cmd(device: (int, int, Any, Any),
     print('! cmd:', cmd)
     return cmd
 
-async def run_prompt(device: (int, int, Any, Any),
+async def run_prompt(device: tuple[int, int, int],
                      id_: str,
                      prompt: str,
                      model: str,
@@ -141,14 +150,16 @@ async def run_prompt(device: (int, int, Any, Any),
                      top_p: float,
                      stop: list[str] | None=None,
                      streaming: bool=False) -> AsyncIterator[(bool, str, str)]:
-    proc = None
+    index, pi, di = device
     stdout: bytes = b''
-    stderr: bytes = b'llama.cpp ' + model.encode()
+    stderr: bytes = b'llama.cpp ' + model.encode() # FIXME: default value is required?
     prompt_enc: bytes = prompt.encode()
     shell_prompt: str = shlex.quote(prompt)
     stop_enc = None if stop is None else [n.encode() for n in stop]
     stopped: bool = False
     read_stderr_task = None
+    proc_model: str | None = None
+    proc: asyncio.subprocess.Process | None = None
 
     print('? prompt:', repr(prompt))
 
@@ -167,11 +178,25 @@ async def run_prompt(device: (int, int, Any, Any),
 
     try:
         async with timeout(TIMEOUT) as cm:
-            proc = await asyncio.create_subprocess_shell(
-                cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
+            # get eager proc with its last used model
+            proc_model, proc = devices_procs[index]
+
+            if proc_model != model:
+                if proc:
+                    # close proc because model is wrong
+                    proc.kill()
+                    await proc.wait()
+                    print('proc kill [wrong model]')
+
+                # create new proc for model
+                proc = await asyncio.create_subprocess_shell(
+                    cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+
+                devices_procs[index] = (model, proc)
+                print('devices_procs:', devices_procs)
 
             if streaming:
                 buf: bytes
@@ -263,7 +288,17 @@ async def run_prompt(device: (int, int, Any, Any),
             proc = None
 
     print('!! stdout', repr(stdout))
-    # print('!! stderr', repr(stderr))
+    print('!! stderr', repr(stderr))
+
+    # create eager proc for model
+    proc = await asyncio.create_subprocess_shell(
+        cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    devices_procs[index] = (model, proc)
+    print('devices_procs:', devices_procs)
 
     if cm.expired:
         res = {
@@ -298,21 +333,18 @@ async def post_api_1_0_text_completion(request, id_: str):
     stop = data.get('stop')
     
     # find avilable lock
-    t = 0
-
     while True:
         for dl in devices_locks:
             device, lock = dl
-            pi, di, p, d = device
+            index, pi, di = device
 
             if lock.locked():
-                print(f'platform {pi}, device {di}: locked')
+                print(f'index {index}, platform {pi}, device {di}: locked')
                 continue
             
-            print(f'platform {pi}, device {di}: available')
+            print(f'index {index}, platform {pi}, device {di}: available')
             break
         else:
-            t += 1
             await asyncio.sleep(1.0)
             continue
 
@@ -324,7 +356,7 @@ async def post_api_1_0_text_completion(request, id_: str):
     stderr = None
 
     async with lock:
-        print(f'platform {pi}, device {di}: acquired')
+        print(f'index {index}, platform {pi}, device {di}: acquired')
         
         g = run_prompt(
             device=device,
@@ -346,7 +378,7 @@ async def post_api_1_0_text_completion(request, id_: str):
             if done:
                 break
 
-    print(f'platform {pi}, device {di}: released')
+    print(f'index {index}, platform {pi}, device {di}: released')
 
     # post-process
     output = stdout
@@ -376,15 +408,13 @@ async def _ws_text_completion_stream(ws, id_: str, data: dict):
     stop = data.get('stop')
     
     # find avilable lock
-    t = 0
-
     while True:
         for dl in devices_locks:
             device, lock = dl
-            pi, di, p, d = device
+            index, pi, di = device
 
             if lock.locked():
-                print(f'platform {pi}, device {di}: locked')
+                print(f'index {index}, platform {pi}, device {di}: locked')
                 
                 res = {
                     'id': id_,
@@ -392,15 +422,13 @@ async def _ws_text_completion_stream(ws, id_: str, data: dict):
                     'task_queue_size': len(task_queue),
                 }
 
-                t += 1
                 await ws.send_json(res)
                 await asyncio.sleep(1.0)
                 continue
 
-            print(f'platform {pi}, device {di}: available')
+            print(f'index {index}, platform {pi}, device {di}: available')
             break
         else:
-            t += 1
             await asyncio.sleep(1.0)
             continue
 
@@ -412,7 +440,7 @@ async def _ws_text_completion_stream(ws, id_: str, data: dict):
     stderr = None
 
     async with lock:
-        print(f'platform {pi}, device {di}: acquired')
+        print(f'index {index}, platform {pi}, device {di}: acquired')
         
         g = run_prompt(
             device=device,
@@ -451,7 +479,7 @@ async def _ws_text_completion_stream(ws, id_: str, data: dict):
             res = stdout_or_res
             await ws.send_json(res)
 
-    print(f'platform {pi}, device {di}: released')
+    print(f'index {device}, platform {pi}, device {di}: released')
 
     # post-process
     output = stdout
@@ -499,7 +527,7 @@ async def get_api_1_0_text_completion(request, id_: str):
 
 @routes.get('/')
 async def get_index(request, id_: str):
-    return web.Response(text='AI: Hello human.\nHuman: Hello AI.')
+    return web.Response(text='AI: Hello human.\nHuman: Hello AI.\n')
 
 @middleware
 async def task_queue_middleware(request, handler):
