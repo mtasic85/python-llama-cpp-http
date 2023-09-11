@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v0.2.3
+
+Changed:
+    - Do not eagerly load models.
+
+## v0.2.2
+
+Fixed:
+    - Do not import server on package import.
+
 ## v0.2.1
 
 Changed:

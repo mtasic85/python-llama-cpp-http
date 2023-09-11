@@ -49,13 +49,13 @@ PLATFORMS_DEVICES = cli_args.platforms_devices
 #
 devices: list[(int, int, Any, Any)] = []
 devices_locks: list[asyncio.Lock] = []
-devices_procs: list[tuple[str | None, asyncio.subprocess.Process | None]] = []
+# devices_procs: list[tuple[str | None, asyncio.subprocess.Process | None]] = []
 task_queue = set()
 
 def init_devices():
     global devices
     global devices_locks
-    global devices_procs
+    # global devices_procs
     
     if BACKEND == 'cpu':
         # allow only ONE "device" concurrently
@@ -79,13 +79,9 @@ def init_devices():
         devices_locks.append((n, asyncio.Lock()))
 
     # create devices_procs and set all values to None
-    devices_procs = [(None, None)] * len(devices)
-
-    print('devices_locks:')
-    pprint(devices_locks)
-    
-    print('devices_procs:')
-    pprint(devices_procs)
+    # devices_procs = [(None, None)] * len(devices)
+    print('devices_locks:', devices_locks)
+    # print('devices_procs:', devices_procs)
 
 def build_llama_cpp_cmd(device: tuple[int, int, int],
                         prompt: str,
@@ -179,24 +175,30 @@ async def run_prompt(device: tuple[int, int, int],
     try:
         async with timeout(TIMEOUT) as cm:
             # get eager proc with its last used model
-            proc_model, proc = devices_procs[index]
-
-            if proc_model != model:
-                if proc:
-                    # close proc because model is wrong
-                    proc.kill()
-                    await proc.wait()
-                    print('proc kill [wrong model]')
-
-                # create new proc for model
-                proc = await asyncio.create_subprocess_shell(
-                    cmd,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-
-                devices_procs[index] = (model, proc)
-                print('devices_procs:', devices_procs)
+            # proc_model, proc = devices_procs[index]
+            #
+            # if proc_model != model:
+            #     if proc:
+            #         # close proc because model is wrong
+            #         proc.kill()
+            #         await proc.wait()
+            #         print('proc kill [wrong model]')
+            #
+            #     # create new proc for model
+            #     proc = await asyncio.create_subprocess_shell(
+            #         cmd,
+            #         stdout=asyncio.subprocess.PIPE,
+            #         stderr=asyncio.subprocess.PIPE,
+            #     )
+            #
+            #     devices_procs[index] = (model, proc)
+            #     print('devices_procs:', devices_procs)
+            # create new proc for model
+            proc = await asyncio.create_subprocess_shell(
+                cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
 
             if streaming:
                 buf: bytes
@@ -291,14 +293,14 @@ async def run_prompt(device: tuple[int, int, int],
     print('!! stderr', repr(stderr))
 
     # create eager proc for model
-    proc = await asyncio.create_subprocess_shell(
-        cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-
-    devices_procs[index] = (model, proc)
-    print('devices_procs:', devices_procs)
+    # proc = await asyncio.create_subprocess_shell(
+    #     cmd,
+    #     stdout=asyncio.subprocess.PIPE,
+    #     stderr=asyncio.subprocess.PIPE,
+    # )
+    #
+    # devices_procs[index] = (model, proc)
+    # print('devices_procs:', devices_procs)
 
     if cm.expired:
         res = {
