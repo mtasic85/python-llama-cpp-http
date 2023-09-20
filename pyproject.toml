@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "llama_cpp_http"
-version = "0.2.3"
+version = "0.2.4"
 description = "Python llama.cpp HTTP Server and LangChain LLM Client"
 homepage = "https://github.com/mtasic85/python-llama-cpp-http"
 repository = "https://github.com/mtasic85/python-llama-cpp-http"

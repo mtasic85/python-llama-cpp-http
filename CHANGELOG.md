@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.2.4
+
+Changed:
+    - Default --platforms-devices "0:0"
+
+Fixed:
+    - Token unicode string decoding.
+
 ## v0.2.3
 
 Changed:

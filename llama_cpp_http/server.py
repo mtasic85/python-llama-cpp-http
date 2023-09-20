@@ -33,7 +33,7 @@ parser.add_argument('--timeout', help='llama.cpp timeout in seconds', default=30
 parser.add_argument('--backend', help='llama.cpp execution backend', default='cpu', type=str, choices=['cpu', 'clblast', 'hipblas', 'cublas'])
 parser.add_argument('--models-path', help='models directory path', default='models')
 parser.add_argument('--llama-cpp-path', help='llama.cpp directory path', default='llama.cpp')
-parser.add_argument('--platforms-devices', help='Custom platforms and devices indexes, example: 0:0,0:1', type=str, required=False)
+parser.add_argument('--platforms-devices', help='Custom platforms and devices indexes, example: 0:0,0:1', default="0:0")
 cli_args = parser.parse_args()
 
 HOST = cli_args.host
