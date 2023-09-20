@@ -201,9 +201,11 @@ async def run_prompt(device: tuple[int, int, int],
             )
 
             if streaming:
+                prev_buf: bytes
                 buf: bytes
                 text: str
 
+                # receive original prompt in stdout
                 # strip original prompt from return
                 while not proc.stdout.at_eof():
                     # stdout
@@ -218,7 +220,8 @@ async def run_prompt(device: tuple[int, int, int],
 
                 # return left-overs from stdout as buf
                 buf = stdout
-                text = buf.decode('unicode-escape')
+                prev_buf = b''
+                text = stdout.decode()
 
                 res = {
                     'id': id_,
@@ -232,14 +235,16 @@ async def run_prompt(device: tuple[int, int, int],
                 # read rest of tokens
                 while not proc.stdout.at_eof():
                     buf = await proc.stdout.read(128)
+                    prev_buf += buf
                     stdout += buf
 
-                    # FIXME: requires better implementation
                     try:
-                        text = buf.decode('unicode-escape')
+                        text = prev_buf.decode()
                     except Exception as e:
                         print('run_prompt buf.decode("unicode-escape") exception:', e)
                         continue
+
+                    prev_buf = b''
                     
                     res = {
                         'id': id_,
