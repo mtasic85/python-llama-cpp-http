@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## v0.2.5
+
+Changed:
+    - Forced immediate kill of subprocess. In that case info/stderr is not returned.
+
 ## v0.2.4
 
 Added:

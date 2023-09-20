@@ -50,13 +50,11 @@ PLATFORMS_DEVICES = cli_args.platforms_devices
 #
 devices: list[(int, int, Any, Any)] = []
 devices_locks: list[asyncio.Lock] = []
-# devices_procs: list[tuple[str | None, asyncio.subprocess.Process | None]] = []
 task_queue = set()
 
 def init_devices():
     global devices
     global devices_locks
-    # global devices_procs
     
     if BACKEND == 'cpu':
         # allow only ONE "device" concurrently
@@ -79,10 +77,8 @@ def init_devices():
     for n in devices:
         devices_locks.append((n, asyncio.Lock()))
 
-    # create devices_procs and set all values to None
-    # devices_procs = [(None, None)] * len(devices)
-    print('devices_locks:', devices_locks)
-    # print('devices_procs:', devices_procs)
+    print('devices_locks:')
+    pprint(devices_locks)
 
 def parse_llama_print_timings(text: str) -> dict:
     lines = [n for n in text.splitlines() if n.startswith('llama_print_timings:')]
@@ -107,8 +103,6 @@ def parse_llama_print_timings(text: str) -> dict:
             for n in v
         }
 
-    # print('parse_llama_print_timings:')
-    # print('lines:', lines)
     return lines
 
 def build_llama_cpp_cmd(device: tuple[int, int, int],
@@ -150,7 +144,7 @@ def build_llama_cpp_cmd(device: tuple[int, int, int],
         '--top-k', top_k,
         '--top-p', top_p,
         # '--mlock',
-        # '--no-mmap',
+        '--no-mmap',
         '--simple-io',
         '--log-disable',
         '--prompt', shell_prompt,
@@ -185,8 +179,6 @@ async def run_prompt(device: tuple[int, int, int],
     proc_model: str | None = None
     proc: asyncio.subprocess.Process | None = None
 
-    # print('? prompt:', repr(prompt))
-
     cmd: str = build_llama_cpp_cmd(
         device=device,
         prompt=prompt,
@@ -202,25 +194,6 @@ async def run_prompt(device: tuple[int, int, int],
 
     try:
         async with timeout(TIMEOUT) as cm:
-            # get eager proc with its last used model
-            # proc_model, proc = devices_procs[index]
-            #
-            # if proc_model != model:
-            #     if proc:
-            #         # close proc because model is wrong
-            #         proc.kill()
-            #         await proc.wait()
-            #         print('proc kill [wrong model]')
-            #
-            #     # create new proc for model
-            #     proc = await asyncio.create_subprocess_shell(
-            #         cmd,
-            #         stdout=asyncio.subprocess.PIPE,
-            #         stderr=asyncio.subprocess.PIPE,
-            #     )
-            #
-            #     devices_procs[index] = (model, proc)
-            #     print('devices_procs:', devices_procs)
             # create new proc for model
             t0: float = time.time()
 
@@ -249,7 +222,7 @@ async def run_prompt(device: tuple[int, int, int],
                     if len(stdout) > len(prompt_enc):
                         break
 
-                    await asyncio.sleep(0.1)
+                    await asyncio.sleep(0.2)
 
                 stdout = stdout[1 + len(prompt_enc):]
                 stderr = b''
@@ -261,6 +234,7 @@ async def run_prompt(device: tuple[int, int, int],
                 buf = stdout
                 prev_buf = b''
                 text = stdout.decode()
+                print(f'[{index}, {pi}, {di}]:', repr(text))
 
                 res = {
                     'id': id_,
@@ -284,7 +258,8 @@ async def run_prompt(device: tuple[int, int, int],
                         continue
 
                     prev_buf = b''
-                    
+                    print(f'[{index}, {pi}, {di}]:', repr(text))
+
                     res = {
                         'id': id_,
                         'status': 'chunk',
@@ -306,15 +281,18 @@ async def run_prompt(device: tuple[int, int, int],
                     if stopped:
                         break
 
-                    await asyncio.sleep(0.1)
+                    await asyncio.sleep(0.2)
             else:
                 stdout, stderr = await proc.communicate()
                 stdout = stdout[1 + len(prompt_enc):]
 
             if streaming:
-                stderr = await proc.stderr.read()
+                if not stopped:
+                    stderr = await proc.stderr.read()
 
             if stopped:
+                print('stopword, trying to kill proc', proc.pid)
+
                 try:
                     proc.kill()
                     await proc.wait()
@@ -327,6 +305,8 @@ async def run_prompt(device: tuple[int, int, int],
             stdout = stdout.decode().strip()
             stderr = stderr.decode().strip()
     except asyncio.TimeoutError as e:
+        print('timeout, trying to kill proc', proc.pid)
+
         try:
             proc.kill()
             await proc.wait()
@@ -336,24 +316,11 @@ async def run_prompt(device: tuple[int, int, int],
         finally:
             proc = None
 
-    # print('!! stdout', repr(stdout))
-    # print('!! stderr', repr(stderr))
-
     print('!! stdout:')
     print(stdout)
     
-    print('!! stderr:')
-    print(stderr)
-
-    # create eager proc for model
-    # proc = await asyncio.create_subprocess_shell(
-    #     cmd,
-    #     stdout=asyncio.subprocess.PIPE,
-    #     stderr=asyncio.subprocess.PIPE,
-    # )
-    #
-    # devices_procs[index] = (model, proc)
-    # print('devices_procs:', devices_procs)
+    # print('!! stderr:')
+    # print(stderr)
 
     if cm.expired:
         res = {
