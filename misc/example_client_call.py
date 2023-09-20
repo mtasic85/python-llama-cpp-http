@@ -26,7 +26,7 @@ async def main():
     #     'AI:',
     # ])
 
-    question = 'Who is and how old is current president of the Republic of Serbia, but have in mind that current year is 2023?'
+    question = 'Who is and how old is current president of the Republic of Serbia, but have in mind that current year is 2026?'
 
     prompt = f'''Question: What is the elevation range for the area that the eastern sector of the Colorado orogeny extends into?
 Thought: I need to search Colorado orogeny, find the area that the eastern sector of the Colorado orogeny extends into, then find the elevation range of the area.

@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import time
 import shlex
 import asyncio
 
@@ -83,6 +84,33 @@ def init_devices():
     print('devices_locks:', devices_locks)
     # print('devices_procs:', devices_procs)
 
+def parse_llama_print_timings(text: str) -> dict:
+    lines = [n for n in text.splitlines() if n.startswith('llama_print_timings:')]
+    
+    lines = [
+        (
+            '_'.join(line.split('=')[0].split(':')[1].split()),
+            
+            [n.strip() for n in line.split('=')[1].split('(')[0].split('/')] + 
+            [n.strip() for n in line.split('=')[1].split('(')[1].replace(')', '').split(',')]
+            if '/' in line else
+            [n.strip() for n in line.split('=')[1].split('(')[0].split('/')]
+        )
+        for line in lines
+    ]
+
+    lines = dict(lines)
+
+    for k, v in lines.items():
+        lines[k] = {
+            '_'.join(n.split()[1:]): float(n.split()[0])
+            for n in v
+        }
+
+    # print('parse_llama_print_timings:')
+    # print('lines:', lines)
+    return lines
+
 def build_llama_cpp_cmd(device: tuple[int, int, int],
                         prompt: str,
                         model: str,
@@ -123,7 +151,7 @@ def build_llama_cpp_cmd(device: tuple[int, int, int],
         '--top-p', top_p,
         # '--mlock',
         # '--no-mmap',
-        '--simple-io',
+        # '--simple-io',
         '--log-disable',
         '--prompt', shell_prompt,
     ])
@@ -157,7 +185,7 @@ async def run_prompt(device: tuple[int, int, int],
     proc_model: str | None = None
     proc: asyncio.subprocess.Process | None = None
 
-    print('? prompt:', repr(prompt))
+    # print('? prompt:', repr(prompt))
 
     cmd: str = build_llama_cpp_cmd(
         device=device,
@@ -199,17 +227,21 @@ async def run_prompt(device: tuple[int, int, int],
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
+            
+            stdout: bytes
+            stderr: bytes
 
             if streaming:
                 prev_buf: bytes
                 buf: bytes
                 text: str
+                t0: float = time.time()
 
                 # receive original prompt in stdout
                 # strip original prompt from return
                 while not proc.stdout.at_eof():
                     # stdout
-                    buf = await proc.stdout.read(16)
+                    buf = await proc.stdout.read(128)
                     stdout += buf
 
                     # skip original prompt
@@ -217,6 +249,10 @@ async def run_prompt(device: tuple[int, int, int],
                         break
 
                 stdout = stdout[1 + len(prompt_enc):]
+                stderr = b''
+                
+                # time-to-load model
+                print('time to load model:', time.time() - t0)
 
                 # return left-overs from stdout as buf
                 buf = stdout
@@ -272,6 +308,13 @@ async def run_prompt(device: tuple[int, int, int],
                 stdout, stderr = await proc.communicate()
                 stdout = stdout[1 + len(prompt_enc):]
 
+            if streaming:
+                # read stderr
+                while not proc.stderr.at_eof():
+                    buf = await proc.stderr.read()
+                    stderr += buf
+                    print('stderr buf:', buf)
+
             if stopped:
                 try:
                     proc.kill()
@@ -294,8 +337,14 @@ async def run_prompt(device: tuple[int, int, int],
         finally:
             proc = None
 
-    print('!! stdout', repr(stdout))
-    print('!! stderr', repr(stderr))
+    # print('!! stdout', repr(stdout))
+    # print('!! stderr', repr(stderr))
+
+    print('!! stdout:')
+    print(stdout)
+    
+    print('!! stderr:')
+    print(stderr)
 
     # create eager proc for model
     # proc = await asyncio.create_subprocess_shell(
@@ -389,8 +438,21 @@ async def post_api_1_0_text_completion(request, id_: str):
 
     # post-process
     output = stdout
-    # info = stderr
-    info = None
+    
+    try:
+        llama_timings = parse_llama_print_timings(stderr)
+    except Exception as e:
+        print('parse_llama_print_timings:', e)
+        llama_timings = None
+    
+    if llama_timings:
+        info = {
+            **llama_timings
+        }
+    else:
+        info = {
+            'error': stderr,
+        }
 
     res = {
         'id': id_,
@@ -490,8 +552,21 @@ async def _ws_text_completion_stream(ws, id_: str, data: dict):
 
     # post-process
     output = stdout
-    # info = stderr
-    info = None
+
+    try:
+        llama_timings = parse_llama_print_timings(stderr)
+    except Exception as e:
+        print('parse_llama_print_timings:', e)
+        llama_timings = None
+    
+    if llama_timings:
+        info = {
+            **llama_timings
+        }
+    else:
+        info = {
+            'error': stderr,
+        }
 
     res = {
         'id': id_,

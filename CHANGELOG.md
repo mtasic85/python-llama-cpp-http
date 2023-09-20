@@ -2,6 +2,9 @@
 
 ## v0.2.4
 
+Added:
+    - llama timing info.
+
 Changed:
     - Default --platforms-devices "0:0"
 
