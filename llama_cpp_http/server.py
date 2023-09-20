@@ -151,7 +151,7 @@ def build_llama_cpp_cmd(device: tuple[int, int, int],
         '--top-p', top_p,
         # '--mlock',
         # '--no-mmap',
-        # '--simple-io',
+        '--simple-io',
         '--log-disable',
         '--prompt', shell_prompt,
     ])
@@ -222,6 +222,8 @@ async def run_prompt(device: tuple[int, int, int],
             #     devices_procs[index] = (model, proc)
             #     print('devices_procs:', devices_procs)
             # create new proc for model
+            t0: float = time.time()
+
             proc = await asyncio.create_subprocess_shell(
                 cmd,
                 stdout=asyncio.subprocess.PIPE,
@@ -235,18 +237,19 @@ async def run_prompt(device: tuple[int, int, int],
                 prev_buf: bytes
                 buf: bytes
                 text: str
-                t0: float = time.time()
 
                 # receive original prompt in stdout
                 # strip original prompt from return
                 while not proc.stdout.at_eof():
                     # stdout
-                    buf = await proc.stdout.read(128)
+                    buf = await proc.stdout.read(1024)
                     stdout += buf
 
                     # skip original prompt
                     if len(stdout) > len(prompt_enc):
                         break
+
+                    await asyncio.sleep(0.1)
 
                 stdout = stdout[1 + len(prompt_enc):]
                 stderr = b''
@@ -270,7 +273,7 @@ async def run_prompt(device: tuple[int, int, int],
 
                 # read rest of tokens
                 while not proc.stdout.at_eof():
-                    buf = await proc.stdout.read(128)
+                    buf = await proc.stdout.read(256)
                     prev_buf += buf
                     stdout += buf
 
@@ -309,11 +312,7 @@ async def run_prompt(device: tuple[int, int, int],
                 stdout = stdout[1 + len(prompt_enc):]
 
             if streaming:
-                # read stderr
-                while not proc.stderr.at_eof():
-                    buf = await proc.stderr.read()
-                    stderr += buf
-                    print('stderr buf:', buf)
+                stderr = await proc.stderr.read()
 
             if stopped:
                 try:
@@ -401,7 +400,7 @@ async def post_api_1_0_text_completion(request, id_: str):
             print(f'index {index}, platform {pi}, device {di}: available')
             break
         else:
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(0.5)
             continue
 
         if lock:
@@ -492,13 +491,13 @@ async def _ws_text_completion_stream(ws, id_: str, data: dict):
                 }
 
                 await ws.send_json(res)
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(0.5)
                 continue
 
             print(f'index {index}, platform {pi}, device {di}: available')
             break
         else:
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(0.5)
             continue
 
         if lock:
