@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## v0.2.6
+
+Changed:
+    - Forced immediate kill of subprocess if websocket is closed.
+
 ## v0.2.5
 
 Changed:

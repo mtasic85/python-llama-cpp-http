@@ -48,8 +48,10 @@ PLATFORMS_DEVICES = cli_args.platforms_devices
 #
 # devices
 #
-devices: list[(int, int, Any, Any)] = []
+devices: list[tuple[int, int, int]] = []
 devices_locks: list[asyncio.Lock] = []
+devices_wss: dict[tuple[int, int, int], Any] = {}
+devices_procs: dict[tuple[int, int, int], asyncio.subprocess.Process] = {}
 task_queue = set()
 
 def init_devices():
@@ -203,6 +205,9 @@ async def run_prompt(device: tuple[int, int, int],
                 stderr=asyncio.subprocess.PIPE,
             )
             
+            # map device to proc
+            devices_procs[device] = proc
+
             stdout: bytes
             stderr: bytes
 
@@ -333,6 +338,10 @@ async def run_prompt(device: tuple[int, int, int],
         yield True, None, res
     else:
         yield True, stdout, stderr
+
+    # remove map device to proc
+    if device in devices_procs:
+        del devices_procs[device]
 
 #
 # web server
@@ -470,6 +479,9 @@ async def _ws_text_completion_stream(ws, id_: str, data: dict):
         if lock:
             break
 
+    # map device to ws
+    devices_wss[device] = ws
+
     # run prompt
     stdout = None
     stderr = None
@@ -546,30 +558,55 @@ async def _ws_text_completion_stream(ws, id_: str, data: dict):
     await ws.send_json(res)
     await ws.close()
 
+    # remove map device to ws
+    if device in devices_wss:
+        del devices_wss[device]
+
 @routes.get('/api/1.0/text/completion')
 async def get_api_1_0_text_completion(request, id_: str):
     ws = web.WebSocketResponse()
     await ws.prepare(request)
     print('websocket connection opened')
 
-    async with asyncio.TaskGroup() as tg:
-        async for msg in ws:
-            if msg.type == aiohttp.WSMsgType.PING:
-                await ws.pong(msg.data)
-            elif msg.type == aiohttp.WSMsgType.TEXT:
-                data = json.loads(msg.data)
+    try:
+        async with asyncio.TaskGroup() as tg:
+            async for msg in ws:
+                if msg.type == aiohttp.WSMsgType.PING:
+                    await ws.pong(msg.data)
+                elif msg.type == aiohttp.WSMsgType.TEXT:
+                    data = json.loads(msg.data)
 
-                # run in background
-                coro = _ws_text_completion_stream(ws, id_, data)
-                task = tg.create_task(coro)
-            elif msg.type == aiohttp.WSMsgType.ERROR:
-                print(f'ws connection closed with exception {ws.exception()}')
-                await ws.close()
-                break
-            else:
-                print(f'ws msg.type:', msg.type)
+                    # run in background
+                    coro = _ws_text_completion_stream(ws, id_, data)
+                    task = tg.create_task(coro)
+                elif msg.type == aiohttp.WSMsgType.ERROR:
+                    print(f'ws connection closed with exception {ws.exception()}')
+                    await ws.close()
+                    break
+                else:
+                    print(f'ws msg.type:', msg.type)
 
-    await task
+            await task
+    except ExceptionGroup as e:
+        print('ExceptionGroup:', e)
+
+        # find device
+        device = [(k, v) for k, v in devices_wss.items() if v is ws][0][0]
+        print('kill proc for device:', device)
+
+        # kill proc
+        while device not in devices_procs:
+            await asyncio.sleep(0.5)
+
+        proc = devices_procs[device]
+        proc.kill()
+        await proc.wait()
+        del devices_procs[device]
+
+        # close ws
+        await ws.close()
+        del devices_wss[device]
+
     print('websocket connection closed')
     return ws
 
