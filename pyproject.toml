@@ -17,7 +17,7 @@ aiohttp = {extras = ["speedups"], version = "^3.8.5"}
 async-timeout = "^4.0.3"
 websockets = "^11.0.3"
 requests = "^2.31.0"
-langchain = "^0.0.268"
+langchain = "^0.0.251"
 gunicorn = "^21.2.0"
 uvloop = "^0.17.0"
 
