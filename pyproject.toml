@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "llama_cpp_http"
-version = "0.2.9"
+version = "0.2.10"
 description = "Python llama.cpp HTTP Server and LangChain LLM Client"
 homepage = "https://github.com/mtasic85/python-llama-cpp-http"
 repository = "https://github.com/mtasic85/python-llama-cpp-http"
@@ -17,7 +17,7 @@ aiohttp = {extras = ["speedups"], version = "^3.8.5"}
 async-timeout = "^4.0.3"
 websockets = "^11.0.3"
 requests = "^2.31.0"
-langchain = "^0.0.304"
+langchain = "^0.0.303"
 gunicorn = "^21.2.0"
 uvloop = "^0.17.0"
 
