@@ -12,6 +12,7 @@ except ImportError:
     pass
 
 import argparse
+import traceback
 from typing import Any
 from uuid import uuid4
 from pprint import pprint
@@ -589,6 +590,7 @@ async def get_api_1_0_text_completion(request, id_: str):
 
             await task
     except ExceptionGroup as e:
+        traceback.print_exc()
         print('ExceptionGroup:', e)
 
         # find device
