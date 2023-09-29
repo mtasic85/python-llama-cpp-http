@@ -324,8 +324,9 @@ async def run_prompt(device: tuple[int, int, int],
     print('!! stdout:')
     print(stdout)
     
-    # print('!! stderr:')
-    # print(stderr)
+    if not stdout:
+        print('!! stderr:')
+        print(stderr)
 
     if cm.expired:
         res = {
