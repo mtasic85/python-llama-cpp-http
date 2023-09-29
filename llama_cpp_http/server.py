@@ -131,7 +131,7 @@ def build_llama_cpp_cmd(device: tuple[int, int, int],
         ])
     elif BACKEND == 'hipblas':
         pass
-    elif BACKEND == 'clblas':
+    elif BACKEND == 'cublas':
         pass
     else:
         raise ValueError(BACKEND)
