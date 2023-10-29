@@ -1,5 +1,34 @@
 # CHANGELOG
 
+## v0.3.0
+
+Added:
+    - client/langchain_llama_cpp_client.py
+    - client/langchain_llama_cpp_embeddings_client.py
+    - misc/example_client_langchain_embedding.py
+
+Changed:
+    - llama.cpp instructions
+    - `client.py` is not `client` package
+    - renamed misc/example_client_call_2.py to example_client_call_react.py
+
+Fixed:
+    - misc/example_client_langchain_stream.py
+
+Removed:
+    - misc/example_client_stream_codellama.py
+
+## v0.2.13
+## v0.2.12
+## v0.2.11
+## v0.2.10
+## v0.2.9
+## v0.2.8
+## v0.2.7
+
+Fixed:
+    - Parsing subprocess output
+
 ## v0.2.6
 
 Changed:

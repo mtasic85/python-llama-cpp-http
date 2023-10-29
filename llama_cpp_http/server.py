@@ -125,10 +125,11 @@ def build_llama_cpp_cmd(device: tuple[int, int, int],
     if BACKEND == 'cpu':
         pass
     elif BACKEND == 'clblast':
-        cmd.extend([
-            f'GGML_OPENCL_PLATFORM={pi}',
-            f'GGML_OPENCL_DEVICE={di}',
-        ])
+        if index is not None and pi is not None and di is not None:
+            cmd.extend([
+                f'GGML_OPENCL_PLATFORM={pi}',
+                f'GGML_OPENCL_DEVICE={di}',
+            ])
     elif BACKEND == 'hipblas':
         pass
     elif BACKEND == 'cublas':
@@ -138,6 +139,57 @@ def build_llama_cpp_cmd(device: tuple[int, int, int],
 
     cmd.extend([
         f'{LLAMA_CPP_PATH}/main',
+        '--model', f'{MODELS_PATH}/{model}',
+        '--n-predict', n_predict,
+        '--ctx-size', ctx_size,
+        '--batch-size', batch_size,
+        '--temp', temperature,
+        '--n-gpu-layers', n_gpu_layers,
+        '--top-k', top_k,
+        '--top-p', top_p,
+        # '--mlock',
+        '--no-mmap',
+        '--simple-io',
+        '--log-disable',
+        '--prompt', shell_prompt,
+    ])
+
+    cmd = [str(n) for n in cmd]
+    cmd = ' '.join(cmd)
+    print('! cmd:', cmd)
+    return cmd
+
+def build_llama_cpp_embedding_cmd(device: tuple[int, int, int],
+                                  prompt: str,
+                                  model: str,
+                                  n_predict: int,
+                                  ctx_size: int,
+                                  batch_size: int,
+                                  temperature: float,
+                                  n_gpu_layers: int,
+                                  top_k: int,
+                                  top_p: float) -> str:
+    index, pi, di = device
+    shell_prompt = shlex.quote(prompt)
+    cmd = []
+
+    if BACKEND == 'cpu':
+        pass
+    elif BACKEND == 'clblast':
+        if index is not None and pi is not None and di is not None:
+            cmd.extend([
+                f'GGML_OPENCL_PLATFORM={pi}',
+                f'GGML_OPENCL_DEVICE={di}',
+            ])
+    elif BACKEND == 'hipblas':
+        pass
+    elif BACKEND == 'cublas':
+        pass
+    else:
+        raise ValueError(BACKEND)
+
+    cmd.extend([
+        f'{LLAMA_CPP_PATH}/embedding',
         '--model', f'{MODELS_PATH}/{model}',
         '--n-predict', n_predict,
         '--ctx-size', ctx_size,
@@ -198,7 +250,7 @@ async def run_prompt(device: tuple[int, int, int],
     try:
         async with timeout(TIMEOUT) as cm:
             # create new proc for model
-            t0: float = time.time()
+            # t0: float = time.time()
 
             proc = await asyncio.create_subprocess_shell(
                 cmd,
@@ -234,7 +286,7 @@ async def run_prompt(device: tuple[int, int, int],
                 stderr = b''
                 
                 # time-to-load model
-                print('time to load model:', time.time() - t0)
+                # print('time to load model:', time.time() - t0)
 
                 # return left-overs from stdout as buf
                 buf = stdout
@@ -344,6 +396,73 @@ async def run_prompt(device: tuple[int, int, int],
     # remove map device to proc
     if device in devices_procs:
         del devices_procs[device]
+
+async def run_embedding(device: tuple[int, int, int],
+                        id_: str,
+                        prompt: str,
+                        model: str,
+                        n_predict: int,
+                        ctx_size: int,
+                        batch_size: int,
+                        temperature: float,
+                        n_gpu_layers: int,
+                        top_k: int,
+                        top_p: float) -> list[float] | None:
+    index, pi, di = device
+    stdout: bytes = b''
+    stderr: bytes = b'' # b'llama.cpp ' + model.encode() # FIXME: default value is required?
+    proc: asyncio.subprocess.Process | None = None
+    vector: list[float] | None = None
+
+    cmd: str = build_llama_cpp_embedding_cmd(
+        device=device,
+        prompt=prompt,
+        model=model,
+        n_predict=n_predict,
+        ctx_size=ctx_size,
+        batch_size=batch_size,
+        temperature=temperature,
+        n_gpu_layers=n_gpu_layers,
+        top_k=top_k,
+        top_p=top_p,
+    )
+
+    try:
+        async with timeout(TIMEOUT) as cm:
+            # create new proc for model
+            proc = await asyncio.create_subprocess_shell(
+                cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+
+            stdout, stderr = await proc.communicate()
+            stdout = stdout.decode().strip()
+            stderr = stderr.decode().strip()
+    except asyncio.TimeoutError as e:
+        print('timeout, trying to kill proc', proc.pid)
+
+        try:
+            proc.kill()
+            await proc.wait()
+            print('proc kill [timeout]')
+        except Exception as e:
+            print('proc kill [timeout]:', e)
+        finally:
+            proc = None
+
+    # print('!! stdout:')
+    # print(stdout)
+
+    # print('!! stderr:')
+    # print(stderr)
+
+    try:
+        vector = [float(n) for n in stdout.split()]
+    except Exception as e:
+        print('run_embedding [error]:', e)
+
+    return vector
 
 #
 # web server
@@ -612,6 +731,53 @@ async def get_api_1_0_text_completion(request, id_: str):
 
     print('websocket connection closed')
     return ws
+
+@routes.post('/api/1.0/text/embeddings')
+async def post_api_1_0_text_embeddings(request, id_: str):
+    data = await request.json()
+    model = data['model']
+    prompt = data['prompt']
+    n_predict = int(data.get('n_predict', '-1'))
+    ctx_size = int(data.get('ctx_size', '2048'))
+    batch_size = int(data.get('batch_size', '512'))
+    temperature = float(data.get('temperature', '0.8'))
+    top_k = int(data.get('top_k', '40'))
+    top_p = float(data.get('top_p', '0.9'))
+    n_gpu_layers = int(data.get('n_gpu_layers', '0'))
+
+    # no device required since it gets executed on CPU
+    device = (None, None, None)
+
+    output: list[float] | None = await run_embedding(
+        device=device,
+        id_=id_,
+        prompt=prompt,
+        model=model,
+        n_predict=n_predict,
+        ctx_size=ctx_size,
+        batch_size=batch_size,
+        temperature=temperature,
+        n_gpu_layers=n_gpu_layers,
+        top_k=top_k,
+        top_p=top_p,
+    )
+
+    if output is None:
+        info = {
+            'error': 'could not embedding text into vector',
+        }
+    else:
+        info = {}
+
+    res = {
+        'id': id_,
+        'status': 'success',
+        **data,
+        'output': output,
+        'info': info,
+    }
+
+    return web.json_response(res)
 
 @routes.get('/')
 async def get_index(request, id_: str):

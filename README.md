@@ -17,6 +17,7 @@ Python HTTP Server and [LangChain](https://python.langchain.com) LLM Client for 
 Server has only two routes:
 - **call**: for a prompt get whole text completion at once: `POST` `/api/1.0/text/completion`
 - **stream**: for a prompt get text chunks via WebSocket: `GET` `/api/1.0/text/completion`
+- **embeddings**: for a prompt get text embeddings: `POST` `/api/1.0/text/embeddings`
 
 LangChain LLM Client has support for sync calls only based on Python packages `requests` and `websockets`.
 
@@ -93,6 +94,12 @@ python -B misc/example_client_call.py | jq .
 
 ```bash
 python -B misc/example_client_stream.py | jq -R '. as $line | try (fromjson) catch $line'
+```
+
+3) Simple text embeddings call `/api/1.0/text/embeddings`:
+
+```bash
+python -B misc/example_client_langchain_embedding.py
 ```
 
 ## Licensing
