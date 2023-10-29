@@ -25,6 +25,11 @@ It is portable but slow. However, if you have large RAM (128GB) you will be able
 ```bash
 git clone https://github.com/ggerganov/llama.cpp llama.cpp
 cd llama.cpp
+
+# GCC
+make -j
+
+# or if you prefer clang
 CC=clang CXX=clang++ make -j
 ```
 
@@ -35,6 +40,11 @@ You will need to have installed appropriate GPU drivers with OpenCL support.
 ```bash
 git clone https://github.com/ggerganov/llama.cpp llama.cpp-clblast
 cd llama.cpp-clblast
+
+# GCC
+make LLAMA_CLBLAST=1 -j
+
+# or if you prefer clang
 CC=clang CXX=clang++ make LLAMA_CLBLAST=1 -j
 ```
 
@@ -43,6 +53,11 @@ CC=clang CXX=clang++ make LLAMA_CLBLAST=1 -j
 ```bash
 git clone https://github.com/ggerganov/llama.cpp llama.cpp-hipblas
 cd llama.cpp-hipblas
+
+# gcc
+make LLAMA_HIPBLAS=1 -j
+
+# or if you prefer clang
 CC=clang CXX=clang++ make LLAMA_HIPBLAS=1 -j
 ```
 
@@ -51,6 +66,11 @@ CC=clang CXX=clang++ make LLAMA_HIPBLAS=1 -j
 ```bash
 git clone https://github.com/ggerganov/llama.cpp llama.cpp-cublas
 cd llama.cpp-cublas
+
+# gcc
+make LLAMA_CUBLAS=1 -j
+
+# or if you prefer clang
 CC=clang CXX=clang++ make LLAMA_CUBLAS=1 -j
 ```
 
