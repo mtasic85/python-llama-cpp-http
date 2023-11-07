@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.1
+
+Changed:
+    - get_app() is now sync instead of async
+
+Fixed:
+    - server: removed `devices_wss` and `devices_procs` that could cause GPU memory leak
+
 ## v0.3.0
 
 Added:

@@ -28,10 +28,11 @@ async def main():
     
     req = {
         'model': 'llama-2-7b-chat.Q2_K.gguf',
+        # 'model': 'tinyllama-1.1b-intermediate-step-715k-1.5t.Q4_K_M.gguf',
         'n_predict': 512,
         'prompt': prompt,
-        'temperature': 0.75,
-        'n_gpu_layers': 33,
+        'temperature': 0.0,
+        'n_gpu_layers': 35,
         'stop': ['Human:']
     }
     

@@ -82,6 +82,11 @@ Our advice is to use model https://huggingface.co/TheBloke/Llama-2-7B-GGUF/blob/
 python -m llama_cpp_http.server --backend cpu --models-path ./models --llama-cpp-path ./llama.cpp
 ```
 
+Experimental:
+```bash
+gunicorn 'llama_cpp_http.server:get_gunicorn_app(backend="clblast", models_path="~/models", llama_cpp_path="~/llama.cpp-clblast", platforms_devices="0:0")' --reload --bind '0.0.0.0:5000' --worker-class aiohttp.GunicornWebWorker
+```
+
 ## Run Client Examples
 
 1) Simple text completion call `/api/1.0/text/completion`:

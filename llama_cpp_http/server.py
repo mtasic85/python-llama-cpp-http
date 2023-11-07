@@ -28,31 +28,21 @@ from async_timeout import timeout
 #
 # env
 #
-parser = argparse.ArgumentParser(prog='server', description='Python llama.cpp HTTP Server')
-parser.add_argument('--host', help='http server host', default='0.0.0.0')
-parser.add_argument('--port', help='http server port', default=5000, type=int)
-parser.add_argument('--timeout', help='llama.cpp timeout in seconds', default=300.0, type=float)
-parser.add_argument('--backend', help='llama.cpp execution backend', default='cpu', type=str, choices=['cpu', 'clblast', 'hipblas', 'cublas'])
-parser.add_argument('--models-path', help='models directory path', default='models')
-parser.add_argument('--llama-cpp-path', help='llama.cpp directory path', default='llama.cpp')
-parser.add_argument('--platforms-devices', help='Custom platforms and devices indexes, example: 0:0,0:1', default="0:0")
-cli_args = parser.parse_args()
-
-HOST = cli_args.host
-PORT = cli_args.port
-TIMEOUT = cli_args.timeout
-BACKEND = cli_args.backend
-MODELS_PATH = cli_args.models_path
-LLAMA_CPP_PATH = cli_args.llama_cpp_path
-PLATFORMS_DEVICES = cli_args.platforms_devices
+HOST = None
+PORT = None
+TIMEOUT = None
+BACKEND = None
+MODELS_PATH = None
+LLAMA_CPP_PATH = None
+PLATFORMS_DEVICES = None
 
 #
 # devices
 #
 devices: list[tuple[int, int, int]] = []
 devices_locks: list[asyncio.Lock] = []
-devices_wss: dict[tuple[int, int, int], Any] = {}
-devices_procs: dict[tuple[int, int, int], asyncio.subprocess.Process] = {}
+# devices_wss: dict[tuple[int, int, int], Any] = {}
+# devices_procs: dict[tuple[int, int, int], asyncio.subprocess.Process] = {}
 task_queue = set()
 
 def init_devices():
@@ -148,7 +138,7 @@ def build_llama_cpp_cmd(device: tuple[int, int, int],
         '--top-k', top_k,
         '--top-p', top_p,
         # '--mlock',
-        '--no-mmap',
+        # '--no-mmap',
         '--simple-io',
         '--log-disable',
         '--prompt', shell_prompt,
@@ -199,7 +189,7 @@ def build_llama_cpp_embedding_cmd(device: tuple[int, int, int],
         '--top-k', top_k,
         '--top-p', top_p,
         # '--mlock',
-        '--no-mmap',
+        # '--no-mmap',
         '--simple-io',
         '--log-disable',
         '--prompt', shell_prompt,
@@ -259,7 +249,7 @@ async def run_prompt(device: tuple[int, int, int],
             )
             
             # map device to proc
-            devices_procs[device] = proc
+            # devices_procs[device] = proc
 
             stdout: bytes
             stderr: bytes
@@ -394,8 +384,8 @@ async def run_prompt(device: tuple[int, int, int],
         yield True, stdout, stderr
 
     # remove map device to proc
-    if device in devices_procs:
-        del devices_procs[device]
+    # if device in devices_procs:
+    #     del devices_procs[device]
 
 async def run_embedding(device: tuple[int, int, int],
                         id_: str,
@@ -601,7 +591,7 @@ async def _ws_text_completion_stream(ws, id_: str, data: dict):
             break
 
     # map device to ws
-    devices_wss[device] = ws
+    # devices_wss[device] = ws
 
     # run prompt
     stdout = None
@@ -680,8 +670,8 @@ async def _ws_text_completion_stream(ws, id_: str, data: dict):
     await ws.close()
 
     # remove map device to ws
-    if device in devices_wss:
-        del devices_wss[device]
+    # if device in devices_wss:
+    #     del devices_wss[device]
 
 @routes.get('/api/1.0/text/completion')
 async def get_api_1_0_text_completion(request, id_: str):
@@ -713,21 +703,21 @@ async def get_api_1_0_text_completion(request, id_: str):
         print('ExceptionGroup:', e)
 
         # find device
-        device = [(k, v) for k, v in devices_wss.items() if v is ws][0][0]
-        print('kill proc for device:', device)
+        # device = [(k, v) for k, v in devices_wss.items() if v is ws][0][0]
+        # print('kill proc for device:', device)
 
         # kill proc
-        while device not in devices_procs:
-            await asyncio.sleep(0.5)
+        # while device not in devices_procs:
+        #     await asyncio.sleep(0.5)
 
-        proc = devices_procs[device]
-        proc.kill()
-        await proc.wait()
-        del devices_procs[device]
+        # proc = devices_procs[device]
+        # proc.kill()
+        # await proc.wait()
+        # del devices_procs[device]
 
         # close ws
         await ws.close()
-        del devices_wss[device]
+        # del devices_wss[device]
 
     print('websocket connection closed')
     return ws
@@ -798,14 +788,62 @@ async def task_queue_middleware(request, handler):
 
     return resp
 
-async def get_app():
+# async def get_app():
+#     app = web.Application(middlewares=[task_queue_middleware])
+#     app.add_routes(routes)
+#     return app
+
+def get_app():
     app = web.Application(middlewares=[task_queue_middleware])
     app.add_routes(routes)
     return app
 
+# def get_gunicorn_app(timeout=300,
+#                      backend='cpu',
+#                      models_path='models',
+#                      llama_cpp_path='llama.cpp',
+#                      platforms_devices='0:0'):
+#     global TIMEOUT
+#     global BACKEND
+#     global MODELS_PATH
+#     global LLAMA_CPP_PATH
+#     global PLATFORMS_DEVICES
+#
+#     TIMEOUT = timeout
+#     BACKEND = backend
+#     MODELS_PATH = models_path
+#     LLAMA_CPP_PATH = llama_cpp_path
+#     PLATFORMS_DEVICES = platforms_devices
+#
+#     init_devices()
+#     app = web.Application(middlewares=[task_queue_middleware])
+#     app.add_routes(routes)
+#     return app
+
+
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(prog='server', description='Python llama.cpp HTTP Server')
+    parser.add_argument('--host', help='http server host', default='0.0.0.0')
+    parser.add_argument('--port', help='http server port', default=5000, type=int)
+    parser.add_argument('--timeout', help='llama.cpp timeout in seconds', default=300.0, type=float)
+    parser.add_argument('--backend', help='llama.cpp execution backend', default='cpu', type=str, choices=['cpu', 'clblast', 'hipblas', 'cublas'])
+    parser.add_argument('--models-path', help='models directory path', default='models')
+    parser.add_argument('--llama-cpp-path', help='llama.cpp directory path', default='llama.cpp')
+    parser.add_argument('--platforms-devices', help='Custom platforms and devices indexes, example: 0:0,0:1', default="0:0")
+    cli_args = parser.parse_args()
     print(cli_args)
 
+    HOST = cli_args.host
+    PORT = cli_args.port
+    TIMEOUT = cli_args.timeout
+    BACKEND = cli_args.backend
+    MODELS_PATH = cli_args.models_path
+    LLAMA_CPP_PATH = cli_args.llama_cpp_path
+    PLATFORMS_DEVICES = cli_args.platforms_devices
+
     init_devices()
-    app = asyncio.run(get_app())
+
+    # app = asyncio.run(get_app())
+    # web.run_app(app, host=HOST, port=PORT)
+    app = get_app()
     web.run_app(app, host=HOST, port=PORT)
