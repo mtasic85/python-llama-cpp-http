@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## v0.3.3
+
+Fixed:
+    - Cropping first character from llm output.
+
+## v0.3.2
+
+Added:
+    - server: DEVICE_SHUTDOWN_TIMEOUT, timeout required for device to shutdown
+
+Changed:
+    - server: after each subprocess invocation to llama.cpp wait DEVICE_SHUTDOWN_TIMEOUT seconds
+
 ## v0.3.1
 
 Changed:
